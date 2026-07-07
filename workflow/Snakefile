@@ -1,0 +1,312 @@
+configfile: "config/config.yml"
+
+import glob
+import os
+import re
+import sys
+from shlex import quote
+
+PREFIX = config["prefix"]
+RESULTS_DIR = "results"
+PANELS_DIR = RESULTS_DIR + "/panels"
+PANELS_CFG_DIR = "config/panels"
+TMPDIR = config.get("tmpdir")
+
+if TMPDIR:
+    TMPDIR = os.path.abspath(os.path.expanduser(str(TMPDIR)))
+    shell.prefix(f"mkdir -p {quote(TMPDIR)} && export TMPDIR={quote(TMPDIR)} && ")
+
+
+with open(config["ref"]["chromosomes"]) as _chrom_fh:
+    CHROMS = [line.strip() for line in _chrom_fh if line.strip()]
+if not CHROMS:
+    raise ValueError(f"No chromosomes found in {config['ref']['chromosomes']}")
+
+IBD_INPUT = config["input_data"]["ibd"]
+INDIVIDUALS = config["input_data"]["individuals"]
+GENOME = config["ref"]["genome"]
+
+MASK_PARAMS = config.get("masking", {}).get("ibd_params", {})
+MASK_MIN_L = MASK_PARAMS.get("min_l_cm", 0)
+MASK_MAX_L = MASK_PARAMS.get("max_l_cm", 999)
+MASK_MIN_LOD = MASK_PARAMS.get("min_lod", 0)
+MASK_TRIM = MASK_PARAMS.get("ibd_trim", 0.05)
+MASK_SD = MASK_PARAMS.get("ibd_sd", 5)
+
+CLUSTER_HEIGHTS = [
+    str(h) for h in config.get("clustering", {}).get("heights", [])
+]
+CLUSTER_ENABLED = bool(config.get("clustering", {}).get("enabled", True))
+CLUSTER_THREADS = int(config.get("clustering", {}).get("threads", 24))
+CLUSTER_DIST_METHOD = str(config.get("clustering", {}).get("dist_method", "euclidean"))
+CLUSTER_CLUST_METHOD = str(config.get("clustering", {}).get("clust_method", "ward.D2"))
+CLUSTER_NORMALIZE_IBD_VECTORS = bool(
+    config.get("clustering", {}).get("normalize_ibd_vectors", False)
+)
+CLUSTER_STANDARDIZE_FEATURES = bool(
+    config.get("clustering", {}).get("standardize_features", False)
+)
+CLUSTER_CL_SIZE = int(config.get("clustering", {}).get("cl_size", 2))
+CLUSTER_DEEP_SPLIT = int(config.get("clustering", {}).get("deep_split", 3))
+CLUSTER_KNN = int(config.get("clustering", {}).get("knn", 1))
+CLUSTER_DEFAULT_PANEL = config.get("clustering", {}).get("default_panel", "default")
+ENABLE_DEFAULT_PIPELINE = CLUSTER_ENABLED and bool(CLUSTER_HEIGHTS)
+
+def _cluster_name_slug(x):
+    return re.sub(r"[^A-Za-z0-9]+", "_", str(x)).strip("_")
+
+# IBD-vector transform tag. Kept backward-compatible: with standardize_features
+# off, the tag is exactly "norm" (L2) or "raw" as before. z-score adds "zscore".
+if CLUSTER_STANDARDIZE_FEATURES and CLUSTER_NORMALIZE_IBD_VECTORS:
+    CLUSTER_NORM_TAG = "zscorenorm"
+elif CLUSTER_STANDARDIZE_FEATURES:
+    CLUSTER_NORM_TAG = "zscore"
+elif CLUSTER_NORMALIZE_IBD_VECTORS:
+    CLUSTER_NORM_TAG = "norm"
+else:
+    CLUSTER_NORM_TAG = "raw"
+# distance depends only on dist_method + feature transforms (not clust_method),
+# so the distance matrix is cached under this shorter, height/method-independent key
+CLUSTER_DIST_NORM_TAG = (
+    f"d{_cluster_name_slug(CLUSTER_DIST_METHOD)}"
+    f"_n{CLUSTER_NORM_TAG}"
+)
+CLUSTER_OUTPUT_TAG = (
+    f"{CLUSTER_DIST_NORM_TAG}"
+    f"_m{_cluster_name_slug(CLUSTER_CLUST_METHOD)}"
+)
+
+# shared, height-independent intermediates live under a per-config cache dir
+CLUSTER_CACHE_DIR = RESULTS_DIR + "/cluster_cache"
+CLUSTER_MRAW_RDS = f"{CLUSTER_CACHE_DIR}/{PREFIX}.m_raw.rds"
+CLUSTER_MD_RDS = f"{CLUSTER_CACHE_DIR}/{CLUSTER_DIST_NORM_TAG}/{PREFIX}.m_d.rds"
+CLUSTER_HC_RDS = f"{CLUSTER_CACHE_DIR}/{CLUSTER_OUTPUT_TAG}/{PREFIX}.res_hc.rds"
+CLUSTER_HIER_RDS = f"{CLUSTER_CACHE_DIR}/{CLUSTER_OUTPUT_TAG}/{PREFIX}.tree_hier.rds"
+
+def cluster_panel_name(height):
+    return f"cluster_h{height}_{CLUSTER_OUTPUT_TAG}"
+
+CLUSTER_DEFAULT_PANELS = [cluster_panel_name(h) for h in CLUSTER_HEIGHTS]
+
+CLUSTER_PANELS = {
+    "default": {
+        "sample_file": INDIVIDUALS,
+        "heights": CLUSTER_HEIGHTS,
+    }
+}
+
+CUSTOM_PANELS = config.get("aggregation", {}).get("panels") or []
+
+AGG_PARAMS = config.get("aggregation", {}).get("ibd_params", {})
+AGG_MIN_L = AGG_PARAMS.get("min_l_cm", 0)
+AGG_MAX_L = AGG_PARAMS.get("max_l_cm", 999)
+AGG_MIN_LOD = AGG_PARAMS.get("min_lod", 0)
+AGG_MAX_CONCURRENT_IBD_JOBS = config.get("aggregation", {}).get("max_concurrent_ibd_jobs")
+if AGG_MAX_CONCURRENT_IBD_JOBS is None:
+    AGG_MAX_CONCURRENT_IBD_JOBS = sys.maxsize
+else:
+    AGG_MAX_CONCURRENT_IBD_JOBS = int(AGG_MAX_CONCURRENT_IBD_JOBS)
+    if AGG_MAX_CONCURRENT_IBD_JOBS < 1:
+        raise ValueError("aggregation.max_concurrent_ibd_jobs must be >= 1")
+workflow.global_resources["aggregation_ibd_jobs"] = AGG_MAX_CONCURRENT_IBD_JOBS
+
+COLOR_TSNE_CHROMA_MIN = float(config.get("aggregation", {}).get("color_tsne_chroma_min", 20))
+COLOR_TSNE_CHROMA_MAX = float(config.get("aggregation", {}).get("color_tsne_chroma_max", 130))
+COLOR_TSNE_LUM_MIN = float(config.get("aggregation", {}).get("color_tsne_lum_min", 15))
+COLOR_TSNE_LUM_MAX = float(config.get("aggregation", {}).get("color_tsne_lum_max", 95))
+COLOR_TSNE_GAMMA_C = float(config.get("aggregation", {}).get("color_tsne_gamma_c", 0.7))
+COLOR_TSNE_GAMMA_L = float(config.get("aggregation", {}).get("color_tsne_gamma_l", 0.8))
+COLOR_TSNE_HUE_SCALE = float(config.get("aggregation", {}).get("color_tsne_hue_scale", 1.15))
+COLOR_TSNE_HUE_ROTATE = float(config.get("aggregation", {}).get("color_tsne_hue_rotate", 25))
+COLOR_TSNE_HUE_SPREAD = str(config.get("aggregation", {}).get("color_tsne_hue_spread", "range"))
+COLOR_MAP_SHAPES = config.get("aggregation", {}).get("color_map_shapes", list(range(16)))
+if not isinstance(COLOR_MAP_SHAPES, list) or not COLOR_MAP_SHAPES:
+    raise ValueError("aggregation.color_map_shapes must be a non-empty list of shape ids")
+try:
+    COLOR_MAP_SHAPES = [str(int(x)) for x in COLOR_MAP_SHAPES]
+except (TypeError, ValueError):
+    raise ValueError("aggregation.color_map_shapes must contain only integer shape ids")
+COLOR_MAP_SHAPES_ARG = ",".join(COLOR_MAP_SHAPES)
+COLOR_MAP_EMBEDDING = str(config.get("aggregation", {}).get("color_map_embedding", "tsne3"))
+if COLOR_MAP_EMBEDDING not in ("tsne3", "mds3"):
+    raise ValueError("aggregation.color_map_embedding must be one of: tsne3, mds3")
+COLOR_MAP_MAPPING = str(config.get("aggregation", {}).get("color_map_mapping", "radial"))
+if COLOR_MAP_MAPPING not in ("radial", "pca_axes"):
+    raise ValueError("aggregation.color_map_mapping must be one of: radial, pca_axes")
+if COLOR_TSNE_CHROMA_MAX <= COLOR_TSNE_CHROMA_MIN:
+    raise ValueError("aggregation.color_tsne_chroma_max must be > color_tsne_chroma_min")
+if COLOR_TSNE_LUM_MAX <= COLOR_TSNE_LUM_MIN:
+    raise ValueError("aggregation.color_tsne_lum_max must be > color_tsne_lum_min")
+if COLOR_TSNE_GAMMA_C <= 0 or COLOR_TSNE_GAMMA_L <= 0:
+    raise ValueError("aggregation.color_tsne_gamma_c and color_tsne_gamma_l must be > 0")
+if COLOR_TSNE_HUE_SPREAD not in ("raw", "range", "rank"):
+    raise ValueError("aggregation.color_tsne_hue_spread must be one of: raw, range, rank")
+_default_mix_files = glob.glob(
+    os.path.join(PANELS_CFG_DIR, "default", "mixture_*.tsv")
+)
+DEFAULT_MIX_PANELS = sorted(
+    {
+        "auto",
+        *[
+            os.path.basename(x).replace("mixture_", "").replace(".tsv", "")
+            for x in _default_mix_files
+        ],
+    }
+)
+if not ENABLE_DEFAULT_PIPELINE:
+    DEFAULT_MIX_PANELS = []
+
+MIX_ENABLED = bool(config.get("mixture", {}).get("enabled", True))
+if not MIX_ENABLED:
+    DEFAULT_MIX_PANELS = []
+
+CUSTOM_MIX_PANELS = {}
+if MIX_ENABLED:
+    for _panel in CUSTOM_PANELS:
+        _dir = os.path.join(PANELS_CFG_DIR, _panel)
+        _files = glob.glob(os.path.join(_dir, "mixture_*.tsv"))
+        _sets = [
+            os.path.basename(x).replace("mixture_", "").replace(".tsv", "")
+            for x in _files
+        ]
+        CUSTOM_MIX_PANELS[_panel] = sorted(_sets)
+
+CUSTOM_MIX_ALL = sorted(
+    {s for sets in CUSTOM_MIX_PANELS.values() for s in sets}
+)
+
+CUSTOM_PANELS_WITH_COLOR = [
+    p for p in CUSTOM_PANELS
+    if os.path.exists(os.path.join(PANELS_CFG_DIR, p, "color_map.tsv"))
+]
+
+MIX_MARKER_FILE = (
+    config.get("mixture", {}).get("marker_file")
+    or config.get("ref", {}).get("marker_file")
+)
+_mix_method_cfg = config.get("mixture", {}).get("method", "nnls")
+if isinstance(_mix_method_cfg, list):
+    MIX_METHODS = [str(m).lower() for m in _mix_method_cfg]
+else:
+    _mix_method_val = str(_mix_method_cfg).lower()
+    MIX_METHODS = ["nnls", "bayesian"] if _mix_method_val == "both" else [_mix_method_val]
+
+_allowed_mix_methods = {"nnls", "bayesian"}
+if not set(MIX_METHODS).issubset(_allowed_mix_methods):
+    raise ValueError(
+        "mixture.method must be one of 'nnls', 'bayesian', 'both', "
+        "or a list containing only 'nnls'/'bayesian'."
+    )
+
+MIX_THREADS = int(config.get("mixture", {}).get("threads", 12))
+MIX_MCMC_ITER = config.get("mixture", {}).get("mcmc_iter", 200000)
+MIX_BURNIN = config.get("mixture", {}).get("burnin", 20000)
+MIX_THIN = config.get("mixture", {}).get("thin", 5)
+MIX_PROPOSAL_SCALE = config.get("mixture", {}).get("proposal_scale", 200)
+MIX_MCMC_CHAINS = int(config.get("mixture", {}).get("mcmc_chains", 1))
+MIX_ADAPT_BURNIN_FRAC = float(config.get("mixture", {}).get("adapt_burnin_frac", 0.0))
+MIX_ADAPT_INTERVAL = int(config.get("mixture", {}).get("adapt_interval", 200))
+MIX_ADAPT_TARGET_ACCEPT = float(config.get("mixture", {}).get("adapt_target_accept", 0.01))
+MIX_LOCAL_MOVE_PROB = float(config.get("mixture", {}).get("local_move_prob", 1.0))
+MIX_MEAN_ACTIVE_SOURCES = float(config.get("mixture", {}).get("mean_active_sources", 6.0))
+MIX_ACTIVE_EPS = float(config.get("mixture", {}).get("active_eps", 1e-4))
+MIX_HYBRID_ACTIVE_SEARCH = int(config.get("mixture", {}).get("hybrid_active_search", 1))
+MIX_MAX_ACTIVE_SOURCES = int(config.get("mixture", {}).get("max_active_sources", 0))
+MIX_ACTIVE_SEARCH_SLOTS = int(config.get("mixture", {}).get("active_search_slots", 200))
+MIX_ACTIVE_SEARCH_ITER = int(config.get("mixture", {}).get("active_search_iter", 1500))
+MIX_ACTIVE_SEARCH_BURNIN = int(config.get("mixture", {}).get("active_search_burnin", 500))
+MIX_ACTIVE_SEARCH_THIN = int(config.get("mixture", {}).get("active_search_thin", 10))
+MIX_ACTIVE_SEARCH_JUMP_PROB = float(config.get("mixture", {}).get("active_search_jump_prob", 0.1))
+MIX_AUTO_K_MIN = int(config.get("mixture", {}).get("auto_k_min", 2))
+MIX_AUTO_K_MAX = int(config.get("mixture", {}).get("auto_k_max", 10))
+if MIX_AUTO_K_MIN < 2 or MIX_AUTO_K_MAX < 2 or MIX_AUTO_K_MIN > MIX_AUTO_K_MAX:
+    raise ValueError("mixture.auto_k_min/auto_k_max must satisfy 2 <= auto_k_min <= auto_k_max")
+MIX_AUTO_SOURCE_PICK_METHOD = str(
+    config.get("mixture", {}).get("auto_source_pick_method", "tree_spread")
+).lower()
+if MIX_AUTO_SOURCE_PICK_METHOD not in (
+    "tree_spread", "farthest", "cluster_medoids", "differentiated", "differentiated_spread"
+):
+    raise ValueError(
+        "mixture.auto_source_pick_method must be one of: tree_spread, farthest, "
+        "cluster_medoids, differentiated, differentiated_spread"
+    )
+MIX_AUTO_SOURCE_BROAD_K = int(config.get("mixture", {}).get("auto_source_broad_k", 0))
+MIX_AUTO_SOURCE_MAX_PER_BROAD_CLADE = int(
+    config.get("mixture", {}).get("auto_source_max_per_broad_clade", 1)
+)
+if MIX_AUTO_SOURCE_MAX_PER_BROAD_CLADE < 1:
+    raise ValueError("mixture.auto_source_max_per_broad_clade must be >= 1")
+MIX_AUTO_SOURCE_MIN_TREE_DIST_QUANTILE = float(
+    config.get("mixture", {}).get("auto_source_min_tree_dist_quantile", 0.0)
+)
+if MIX_AUTO_SOURCE_MIN_TREE_DIST_QUANTILE < 0 or MIX_AUTO_SOURCE_MIN_TREE_DIST_QUANTILE > 1:
+    raise ValueError("mixture.auto_source_min_tree_dist_quantile must be in [0, 1]")
+MIX_AUTO_SOURCE_LABEL_PREFIX_PARTS = int(
+    config.get("mixture", {}).get("auto_source_label_prefix_parts", 0)
+)
+MIX_AUTO_SOURCE_MAX_PER_LABEL_PREFIX = int(
+    config.get("mixture", {}).get("auto_source_max_per_label_prefix", 0)
+)
+if MIX_AUTO_SOURCE_LABEL_PREFIX_PARTS < 0 or MIX_AUTO_SOURCE_MAX_PER_LABEL_PREFIX < 0:
+    raise ValueError("mixture.auto_source_label_prefix_parts and auto_source_max_per_label_prefix must be >= 0")
+# for source_pick_method differentiated / differentiated_spread
+MIX_AUTO_SOURCE_MIN_CLUSTER_SIZE = int(
+    config.get("mixture", {}).get("auto_source_min_cluster_size", 1)
+)
+if MIX_AUTO_SOURCE_MIN_CLUSTER_SIZE < 1:
+    raise ValueError("mixture.auto_source_min_cluster_size must be >= 1")
+# store_true flag -> a shell fragment (present when true, empty when false)
+MIX_AUTO_SOURCE_RELATIVE_PENDANT = (
+    "--source_relative_pendant"
+    if bool(config.get("mixture", {}).get("auto_source_relative_pendant", False))
+    else ""
+)
+
+PEAK_CFG = config.get("ibd_window_peaks", {})
+PEAK_ENABLED = bool(PEAK_CFG.get("enabled", False))
+PEAK_WINDOW_SIZE = int(PEAK_CFG.get("window_size", 10000))
+PEAK_NORM_MODE = str(PEAK_CFG.get("norm_mode", "pop_size"))
+PEAK_METHODS = [str(x) for x in (PEAK_CFG.get("methods") or ["kl"])]
+PEAK_TAIL_PROB = float(PEAK_CFG.get("tail_prob", 0.01))
+PEAK_THRESHOLD_SCOPE = str(PEAK_CFG.get("threshold_scope", "genome"))
+PEAK_MIN_WINDOW_TOTAL = float(PEAK_CFG.get("min_window_total", 0))
+PEAK_MIN_CLUSTER_N = int(PEAK_CFG.get("min_cluster_n", 4))
+PEAK_CONTRIB_TOP_N = int(PEAK_CFG.get("contrib_top_n", 5))
+PEAK_POINT_SIZE = float(PEAK_CFG.get("point_size", 0.8))
+PEAK_MAX_CONCURRENT_COVERAGE_JOBS = PEAK_CFG.get("max_concurrent_coverage_jobs")
+if PEAK_MAX_CONCURRENT_COVERAGE_JOBS is None:
+    PEAK_MAX_CONCURRENT_COVERAGE_JOBS = sys.maxsize
+else:
+    PEAK_MAX_CONCURRENT_COVERAGE_JOBS = int(PEAK_MAX_CONCURRENT_COVERAGE_JOBS)
+    if PEAK_MAX_CONCURRENT_COVERAGE_JOBS < 1:
+        raise ValueError("ibd_window_peaks.max_concurrent_coverage_jobs must be >= 1")
+workflow.global_resources["peak_coverage_jobs"] = PEAK_MAX_CONCURRENT_COVERAGE_JOBS
+_peak_custom_panels_cfg = PEAK_CFG.get("panels")
+if _peak_custom_panels_cfg is None:
+    PEAK_CUSTOM_PANELS = CUSTOM_PANELS
+else:
+    PEAK_CUSTOM_PANELS = [p for p in _peak_custom_panels_cfg if p in CUSTOM_PANELS]
+PEAK_IBD_MIN_L = float(PEAK_CFG.get("min_l_cm", config.get("aggregation", {}).get("ibd_params", {}).get("min_l_cm", 0)))
+PEAK_IBD_MIN_LOD = float(PEAK_CFG.get("min_lod", config.get("aggregation", {}).get("ibd_params", {}).get("min_lod", 0)))
+if PEAK_NORM_MODE not in ("none", "pop_size"):
+    raise ValueError("ibd_window_peaks.norm_mode must be one of: none, pop_size")
+
+include: "rules/ibd_mask.smk"
+include: "rules/ibd_tot.smk"
+include: "rules/cluster_ibd.smk"
+include: "rules/aggregate_ibd.smk"
+include: "rules/mixmodel_ibd.smk"
+include: "rules/pca_ibd.smk"
+include: "rules/ibd_window_peaks.smk"
+
+
+rule all:
+    input:
+        MASK_OUTPUTS
+        + IBD_TOT_OUTPUTS
+        + CLUSTER_OUTPUTS
+        + AGG_OUTPUTS
+        + MIXMODEL_OUTPUTS
+        + PCA_OUTPUTS
+        + PEAK_OUTPUTS

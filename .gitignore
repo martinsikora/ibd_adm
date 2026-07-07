@@ -1,0 +1,17 @@
+# Generated workflow outputs
+/results/
+.snakemake/
+
+# Input data staging (large; provide locally, do not commit)
+/resources/
+
+# Scratch / temp
+tmp/
+*.tmp
+
+# Backups / editor / OS cruft
+*.bak
+.vscode/
+.DS_Store
+__pycache__/
+*.pyc

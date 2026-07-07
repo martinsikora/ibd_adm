@@ -1,0 +1,157 @@
+# =============================================================================
+# ibd_adm configuration
+#
+# Every knob below is read by workflow/Snakefile. See docs/CONFIGURATION.md for
+# a full per-knob reference (defaults, allowed values, and which stage/script
+# consumes each one). Paths shown as /path/to/... are placeholders you must edit
+# before running on real data.
+# =============================================================================
+
+# Run/dataset name. Used verbatim as the PREFIX in every output filename, e.g.
+# results/ibd_tot/tables/1.example_dataset.ibd_tot.tsv.gz. Keep it filesystem-safe.
+prefix: example_dataset
+
+# Optional scratch directory. When set, every shell command runs with
+# TMPDIR exported here (created if missing). Comment out to use the system TMPDIR.
+tmpdir: /path/to/scratch/ibd_adm
+
+ref:
+  # Reference FASTA. NOTE: currently read into the config dict but not consumed by
+  # any rule (reserved for future use); safe to leave as a placeholder.
+  fasta: /path/to/reference/genome.fa
+  # Chromosome-length file (2 cols: chrom, length) used by `bedtools genomecov`
+  # during masking. Must cover every chromosome in `chromosomes` below.
+  genome: /path/to/reference/genome.genome
+  # Plain list of chromosomes to process, one per line (autosomes by default).
+  chromosomes: config/chromosomes.txt
+  # Per-chromosome marker counts (cols: chrom, n); used by the mixture model to
+  # weight IBD by marker density. Also the fallback for mixture.marker_file.
+  marker_file: config/n_markers.tsv
+
+input_data:
+  # Per-chromosome precomputed IBDseq segments. The {chrom} wildcard is filled
+  # from `ref.chromosomes`. Whitespace/TSV columns consumed downstream:
+  #   $1,$2 = sample ids, $3 = chrom, $4,$5 = start,end (bp), $6 = LOD, $9 = length (cM)
+  ibd: resources/ibd_segments/{chrom}.example_dataset.ibdseq.ibd.gz
+  # Sample sheet (cols: sample_id, label, group). group is one of
+  # cluster_full (used to build clusters), cluster_min_dist (assigned by k-NN),
+  # or exclude (dropped from aggregation).
+  individuals: config/individuals.tsv
+
+masking:
+  # Cap on simultaneous masking IBD jobs (genomecov is IO-heavy).
+  max_concurrent_ibd_jobs: 8
+  # Segment filters for the coverage/mask pass (short segments only).
+  ibd_params:
+    min_l_cm: 2      # min segment length (cM)
+    max_l_cm: 16     # max segment length (cM)
+    min_lod: 3       # min LOD score
+    ibd_trim: 0.05   # fractional trim of the coverage distribution tails
+    ibd_sd: 5        # flag windows above trimmed-mean + ibd_sd * SD as masked
+
+clustering:
+  enabled: true
+  # One panel is produced per cut height (adaptive dynamicTreeCut hybrid).
+  heights:
+    - 0.75
+    - 1.0
+  clust_method: ward.D2   # hclust agglomeration method
+  dist_method: cosine     # distance metric on the IBD feature vectors
+  # IBD-vector transforms applied before the distance calculation:
+  #   normalize_ibd_vectors: L2-normalize each sample's row vector
+  #   standardize_features:  z-score each feature (column / partner sample)
+  # (both are redundant under cosine, which is already magnitude-invariant)
+  normalize_ibd_vectors: false
+  standardize_features: true
+  # adaptive tree-cut parameters (dynamicTreeCut hybrid); tuning these changes
+  # how many samples are left unassigned by the cut
+  cl_size: 2
+  deep_split: 3
+  # cluster_min_dist samples are assigned by k-NN majority vote over cluster_full
+  # samples (k = knn); knn: 1 = single-nearest-neighbour (original behaviour).
+  # Higher k prevents an isolated low-sharing cluster + one mis-placed bridge
+  # sample from turning into a diverse "sink".
+  knn: 7
+  threads: 32
+
+aggregation:
+  max_concurrent_ibd_jobs: 8
+  color_map_shapes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+  color_map_embedding: tsne3      # tsne3 | mds3 : 3-D embedding of the TVD matrix
+  color_map_mapping: radial       # radial | pca_axes : embedding -> hue mapping
+  color_tsne_chroma_min: 40
+  color_tsne_chroma_max: 115
+  color_tsne_lum_min: 15
+  color_tsne_lum_max: 95
+  color_tsne_gamma_c: 0.5
+  color_tsne_gamma_l: 0.8
+  color_tsne_hue_scale: 0.9
+  color_tsne_hue_rotate: 25
+  color_tsne_hue_spread: rank     # raw | range | rank
+  ibd_params:
+    min_l_cm: 1
+    max_l_cm: 16
+    min_lod: 3
+  panels:
+    # Custom aggregation panels. Each name must be a directory under
+    # config/panels/<name>/ providing aggregate.tsv (+ optional color_map.tsv and
+    # mixture_<set>.tsv). The example panel here is built by
+    # workflow/scripts/r/build_example_panel.R (or written by hand).
+    - example_panel
+
+mixture:
+  enabled: true
+  method: both
+  # future multisession workers per run_models job; models parallelize across
+  # target samples (one target/chain is single-threaded)
+  threads: 48
+  auto_k_min: 15
+  auto_k_max: 20
+  # source picker: tree_spread | farthest | cluster_medoids | differentiated |
+  #   differentiated_spread. differentiated_spread partitions the TVD/NJ tree
+  #   into clades balanced by target-sample mass (dense regions subdivided,
+  #   sparse outgroups lumped) and picks the longest-pendant (most drifted,
+  #   least admixed) population per clade -> differentiated but target-proximate.
+  auto_source_pick_method: differentiated_spread
+  auto_source_broad_k: 0
+  auto_source_max_per_broad_clade: 1
+  auto_source_min_tree_dist_quantile: 0.75
+  auto_source_label_prefix_parts: 2
+  auto_source_max_per_label_prefix: 1
+  # differentiated / differentiated_spread knobs:
+  #   min_cluster_size: drop singleton/low-support tips (long branch may be noise)
+  #   relative_pendant: score pendant length relative to root-to-tip depth
+  auto_source_min_cluster_size: 3
+  auto_source_relative_pendant: false
+  mcmc_iter: 200000
+  burnin: 20000
+  thin: 5
+  proposal_scale: 200
+  mcmc_chains: 1
+  adapt_burnin_frac: 0.0
+  adapt_interval: 200
+  adapt_target_accept: 0.01
+  local_move_prob: 1.0
+  mean_active_sources: 6.0
+  active_eps: 1e-4
+  hybrid_active_search: 1
+  max_active_sources: 0
+  active_search_slots: 200
+  active_search_iter: 1500
+  active_search_burnin: 500
+  active_search_thin: 10
+  active_search_jump_prob: 0.1
+
+ibd_window_peaks:
+  enabled: false
+  window_size: 100000
+  norm_mode: pop_size             # none | pop_size
+  methods: [kl, jsd, chi2, max_mad_z]
+  tail_prob: 0.01
+  threshold_scope: genome
+  min_window_total: 0
+  min_cluster_n: 6
+  contrib_top_n: 5
+  point_size: 0.8
+  max_concurrent_coverage_jobs: 2
+  sample_file: config/individuals.tsv
