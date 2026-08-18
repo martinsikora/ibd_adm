@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import os
+import sys
+
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import panel_pops
 
 
 def parse_args():
@@ -11,6 +17,7 @@ def parse_args():
                    help='Panel file (sample_id, pop_id, group); restricts TVD recipients '
                         'to group == donor_recipient (cluster_full) individuals')
     p.add_argument('-o', '--out', dest='out_file', required=True)
+    panel_pops.add_args(p)
     return p.parse_args()
 
 
@@ -36,11 +43,21 @@ def main():
                     'Input files must include a sample1 column to restrict TVD '
                     'recipients by group'
                 )
-            full_ids = set(panel.loc[panel['group'] == 'donor_recipient', 'sample_id'])
+            keep = panel['group'] == 'donor_recipient'
+            forced, dropped = panel_pops.resolve(
+                panel['pop_id'], panel['group'], args
+            )
+            panel_pops.report(forced, dropped, 'the TVD matrix')
+            if forced:
+                keep = keep | panel['pop_id'].isin(forced)
+            if dropped:
+                keep = keep & ~panel['pop_id'].isin(dropped)
+
+            full_ids = set(panel.loc[keep, 'sample_id'])
             n_before = ibd_pop['sample1'].nunique()
             ibd_pop = ibd_pop[ibd_pop['sample1'].isin(full_ids)]
             print(
-                f'__ restricted recipients to {len(full_ids)} cluster_full samples '
+                f'__ restricted recipients to {len(full_ids)} samples '
                 f'({ibd_pop["sample1"].nunique()}/{n_before} present in IBD data) __'
             )
 

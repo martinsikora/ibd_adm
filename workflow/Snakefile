@@ -151,6 +151,38 @@ CLUSTER_PANELS = {
 
 CUSTOM_PANELS = config.get("aggregation", {}).get("panels") or []
 
+# tvd_matrix.py keeps only donor_recipient samples on the recipient side, so a
+# recipient-only cluster never reaches the TVD tree or heatmap even though its
+# profile over the donor palette is well defined (aggregate_ibd.py restricts
+# only the donor side). These force such clusters back in -- all of them at
+# once, or by name -- with an exclude list for catch-all bins like "unassigned".
+_AGG_CFG = config.get("aggregation", {})
+AGG_TVD_INCLUDE_RECIPIENT_ONLY = bool(
+    _AGG_CFG.get("tvd_include_recipient_only_pops", False)
+)
+AGG_TVD_INCLUDE_POPS = _AGG_CFG.get("tvd_include_pops") or []
+AGG_TVD_EXCLUDE_POPS = _AGG_CFG.get("tvd_exclude_pops") or []
+for _k, _v in (("tvd_include_pops", AGG_TVD_INCLUDE_POPS),
+               ("tvd_exclude_pops", AGG_TVD_EXCLUDE_POPS)):
+    if not isinstance(_v, list) or any("," in str(x) or "'" in str(x) for x in _v):
+        raise ValueError(
+            f"aggregation.{_k} must be a YAML list of pop_ids containing no commas"
+            " or quotes"
+        )
+
+
+def tvd_pop_flags():
+    """Extra tvd_matrix.py flags for forcing non-donor pops into the TVD matrix."""
+    parts = []
+    if AGG_TVD_INCLUDE_RECIPIENT_ONLY:
+        parts.append("--include_recipient_only_pops")
+    if AGG_TVD_INCLUDE_POPS:
+        parts.append("--include_pops '" + ",".join(map(str, AGG_TVD_INCLUDE_POPS)) + "'")
+    if AGG_TVD_EXCLUDE_POPS:
+        parts.append("--exclude_pops '" + ",".join(map(str, AGG_TVD_EXCLUDE_POPS)) + "'")
+    return " ".join(parts)
+
+
 AGG_PARAMS = config.get("aggregation", {}).get("ibd_params", {})
 AGG_MIN_L = AGG_PARAMS.get("min_l_cm", 0)
 AGG_MAX_L = AGG_PARAMS.get("max_l_cm", 999)

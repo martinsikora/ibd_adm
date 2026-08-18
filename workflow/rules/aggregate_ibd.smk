@@ -152,12 +152,14 @@ if ENABLE_DEFAULT_PIPELINE:
             sample_file=lambda wc: agg_sample_file("default", wc.height),
         output:
             tsv=f"{cluster_agg_dir('{height}')}/tables/{PREFIX}.ibd_pop_tvd.tsv",
+        params:
+            pop_flags=tvd_pop_flags(),
         priority:
             75
         shell:
             """
             mkdir -p $(dirname {output.tsv})
-            python3 workflow/scripts/python/tvd_matrix.py -s {input.sample_file} -o {output.tsv} {input.ibd_files}
+            python3 workflow/scripts/python/tvd_matrix.py -s {input.sample_file} {params.pop_flags} -o {output.tsv} {input.ibd_files}
             """
 
     rule default_color_map:
@@ -215,12 +217,14 @@ if CUSTOM_PANELS_WITH_COLOR:
             sample_file=lambda wc: agg_sample_file(wc.panel, "custom"),
         output:
             tsv=f"{panel_agg_dir('{panel}')}/tables/{PREFIX}.ibd_pop_tvd.tsv",
+        params:
+            pop_flags=tvd_pop_flags(),
         priority:
             75
         shell:
             """
             mkdir -p {PANELS_DIR}/{wildcards.panel}/aggregation/tables
-            python3 workflow/scripts/python/tvd_matrix.py -s {input.sample_file} -o {output.tsv} {input.ibd_files}
+            python3 workflow/scripts/python/tvd_matrix.py -s {input.sample_file} {params.pop_flags} -o {output.tsv} {input.ibd_files}
             """
 
     rule tvd_plot_custom:

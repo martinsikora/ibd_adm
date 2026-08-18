@@ -154,12 +154,15 @@ if MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:
             panel=f"{cluster_agg_dir('{height}')}/panels/default.tsv"
         output:
             f"{cluster_mix_dir('{height}')}/sample_map.tsv"
+        params:
+            pop_flags=tvd_pop_flags(),
         priority:
             70
         shell:
             """
             mkdir -p $(dirname {output})
-            awk 'BEGIN{{FS=OFS="\\t"}} {{gsub(/\\r/,"")}} NR==1{{print $1,$2; next}} {{p=$2; if(NF>=3 && $3=="recipient") p=p"_r"; print $1,p}}' {input.panel} > {output}
+            python3 workflow/scripts/python/make_mix_sample_map.py \
+            -i {input.panel} {params.pop_flags} -o {output}
             """
 
 if MIX_MARKER_FILE and CUSTOM_PANELS:
@@ -170,12 +173,15 @@ if MIX_MARKER_FILE and CUSTOM_PANELS:
             panel=lambda wc: f"{PANELS_CFG_DIR}/{wc.agg_panel}/aggregate.tsv",
         output:
             f"{panel_mix_dir('{agg_panel}')}/sample_map.tsv"
+        params:
+            pop_flags=tvd_pop_flags(),
         priority:
             70
         shell:
             """
             mkdir -p {PANELS_DIR}/{wildcards.agg_panel}/mixmodel
-            awk 'BEGIN{{FS=OFS="\\t"}} {{gsub(/\\r/,"")}} NR==1{{print $1,$2; next}} {{p=$2; if(NF>=3 && $3=="recipient") p=p"_r"; print $1,p}}' {input.panel} > {output}
+            python3 workflow/scripts/python/make_mix_sample_map.py \
+            -i {input.panel} {params.pop_flags} -o {output}
             """
 
 if MIX_ENABLED and MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:

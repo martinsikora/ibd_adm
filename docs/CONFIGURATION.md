@@ -84,6 +84,9 @@ Stage 4 (`aggregate_ibd.smk`): per-population IBD sharing + TVD + colour map.
 | `aggregation.ibd_params.min_l_cm` | `1` | number | Min segment length (cM) for the masked total-IBD pass (stage 2 `ibd_tot`). |
 | `aggregation.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `aggregation.ibd_params.min_lod` | `3` | number | Min LOD/score. |
+| `aggregation.tvd_include_recipient_only_pops` | `false` | bool | Treat every pop_id with no `donor_recipient` sample as a full cluster: keep it in the TVD matrix (`tvd_matrix.py`) and drop its `_r` suffix in the mixmodel sample_map (`make_mix_sample_map.py`), so it appears under its own name in the TVD tree, PCA and mixture plots. |
+| `aggregation.tvd_include_pops` | `[]` | list of pop_ids | Same treatment, for named pops only. Combines with the flag above. |
+| `aggregation.tvd_exclude_pops` | `[]` | list of pop_ids | Applied after the includes. In the TVD matrix the pops are dropped outright; in the sample_map they are only excluded from the include set (their samples are kept, with `_r`), so a catch-all bin such as `unassigned` never leaves the mixture model. |
 | `aggregation.panels` | `[example_panel]` | list of names | Custom panels; each must be a `config/panels/<name>/` directory. Drives custom aggregation, mixture, PCA, and peaks. Omit/empty to use only the default clustering panels. |
 
 ### Colour-map knobs

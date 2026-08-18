@@ -125,6 +125,17 @@ clustering:
 
 aggregation:
   max_concurrent_ibd_jobs: 8
+  # A cluster whose samples are all `recipient` still has a well-defined profile
+  # over the donor palette (aggregate_ibd.py restricts only the donor side), but
+  # by default it is invisible: tvd_matrix.py drops it from the TVD matrix, and
+  # the mixmodel sample_map gives it an "_r" suffix that pca_ibd.R and
+  # plot_mixmodel.R read as cluster_min_dist. Set these to treat such clusters as
+  # populations in their own right -- the usual case is a manually curated
+  # single-individual cluster split out as an ancestry anchor. Both consumers
+  # read the same keys, so the TVD tree and the plots cannot disagree.
+  tvd_include_recipient_only_pops: false
+  tvd_include_pops: []
+  tvd_exclude_pops: []
   color_map_shapes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
   color_map_embedding: tsne3      # tsne3 | mds3 : 3-D embedding of the TVD matrix
   color_map_mapping: radial       # radial | pca_axes : embedding -> hue mapping
