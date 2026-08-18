@@ -59,13 +59,36 @@ clustering:
   dist_method: cosine     # distance metric on the IBD feature vectors
   # IBD-vector transforms applied before the distance calculation:
   #   normalize_ibd_vectors: L2-normalize each sample's row vector
-  #   standardize_features:  z-score each feature (column / partner sample)
-  # (both are redundant under cosine, which is already magnitude-invariant)
+  #   standardize_features:  z-score each feature (centre AND scale)
+  #   scale_features:        divide each feature by its SD, do NOT centre
+  #
+  # standardize_features must stay OFF under cosine. Cosine is invariant to
+  # scaling a raw row, but centring every column turns a low row total into a
+  # systematic negative offset in all coordinates: 97-99% of a low-sharing
+  # sample's features end up below their column mean, so every such sample
+  # points along the same "everything below average" direction and they become
+  # mutually similar regardless of ancestry. Measured on a 19.7k-sample panel,
+  # this built a sink branch of 397 individuals mixing deep African, Andamanese
+  # and Hoabinhian populations with low-coverage Eurasians.
+  #
+  # scale_features keeps the useful half -- up-weighting low-variance donor
+  # columns, which is what resolves regions whose sharing sits in a few donors --
+  # without the offset centring introduces. Raw cosine (neither transform) is
+  # safe but coarser: it merged the Andean and Mesoamerican blocks and cost the
+  # Americas 25 -> 18 clusters. scale_features is the recommended default.
   normalize_ibd_vectors: false
-  standardize_features: true
+  standardize_features: false
+  scale_features: true
   # adaptive tree-cut parameters (dynamicTreeCut hybrid); tuning these changes
-  # how many samples are left unassigned by the cut
-  cl_size: 2
+  # how many samples are left unassigned by the cut.
+  #
+  # cl_size -> minClusterSize. At 2 the cut emits 1-2 member clusters (151 of
+  # 998 at h0.5 on the reference panel), which are not resolved sub-populations
+  # and account for most of the apparent "shredding" of endogamous groups at
+  # finer cuts. 3 removes every sub-3 cluster at source. A 3/4/5 sweep showed 4
+  # and 5 buy more Africa/SouthAsia cohesion but double then triple the
+  # unassigned count for no Americas/Europe gain, so 3 is the knee.
+  cl_size: 3
   deep_split: 3
   # cluster_min_dist samples are assigned by k-NN majority vote over cluster_full
   # samples (k = knn); knn: 1 = single-nearest-neighbour (original behaviour).
@@ -73,6 +96,32 @@ clustering:
   # sample from turning into a diverse "sink".
   knn: 7
   threads: 32
+  # Optional sharing-gated adaptive cut. Builds ONE labelling from a coarse and
+  # a fine cut of the same tree: a coarse cluster keeps its base label unless
+  # its median per-sample genome-wide IBD clears min_sharing, in which case its
+  # finer subdivision is used. Disabled by default.
+  #
+  # Rationale: no single height suits a worldwide panel. Cutting deeper resolves
+  # real populations where sharing is dense (Americas, later Europe) but shreds
+  # endogamous African and South Asian populations, which have an order of
+  # magnitude less IBD. Gating holds those regions at the base cut while the
+  # dense regions keep the full fine-cut gain, and roughly halves the unassigned
+  # count versus cutting globally.
+  #
+  # This is a DATA-SUFFICIENCY gate, not a split-quality test: sharing magnitude
+  # separates low-sharing REGIONS from the rest, but does not distinguish good
+  # from bad splits WITHIN them, so it also suppresses some genuine splits. See
+  # the header of workflow/scripts/r/cluster_cut_gated.R for the benchmark and
+  # the alternatives that scored worse.
+  #
+  # Neither height need appear in `heights` above -- cut_tree builds any height
+  # on demand. Keep fine_height OUT of `heights` unless you want it aggregated:
+  # every entry there also gets its own full aggregation, PCA and mixmodel.
+  gated_cut:
+    enabled: false
+    base_height: 0.5
+    fine_height: 0.2
+    min_sharing: 250000
 
 aggregation:
   max_concurrent_ibd_jobs: 8
@@ -83,11 +132,21 @@ aggregation:
   color_tsne_chroma_max: 115
   color_tsne_lum_min: 15
   color_tsne_lum_max: 95
-  color_tsne_gamma_c: 0.5
-  color_tsne_gamma_l: 0.8
+  # gammas below are tuned for the rank-spread chroma/luminance (see
+  # color_tsne_lc_spread); with the min-max default, 0.5 / 0.8 are the
+  # equivalent starting values.
+  color_tsne_gamma_c: 0.35
+  color_tsne_gamma_l: 0.6
   color_tsne_hue_scale: 0.9
   color_tsne_hue_rotate: 25
   color_tsne_hue_spread: rank     # raw | range | rank
+  # quantile-spread chroma and luminance as well as hue. With the min-max
+  # default a skewed embedding axis bunches most clusters at the dark,
+  # desaturated end: on one panel median luminance fell to 54 and the palette
+  # held 0.4% vivid yellows and no vivid reds, even though the red/yellow hue
+  # bins were as populated as ever -- the hues were there, rendered as maroon
+  # and olive.
+  color_tsne_lc_spread: rank      # raw | rank
   ibd_params:
     min_l_cm: 1
     max_l_cm: 16
@@ -108,11 +167,17 @@ mixture:
   auto_k_min: 15
   auto_k_max: 20
   # source picker: tree_spread | farthest | cluster_medoids | differentiated |
-  #   differentiated_spread. differentiated_spread partitions the TVD/NJ tree
-  #   into clades balanced by target-sample mass (dense regions subdivided,
-  #   sparse outgroups lumped) and picks the longest-pendant (most drifted,
-  #   least admixed) population per clade -> differentiated but target-proximate.
-  auto_source_pick_method: differentiated_spread
+  #   differentiated_spread | differentiated_unadmixed.
+  #   differentiated_spread partitions the TVD/NJ tree into clades balanced by
+  #   target-sample mass (dense regions subdivided, sparse outgroups lumped) and
+  #   picks the longest-pendant (most drifted, least admixed) population per
+  #   clade -> differentiated but target-proximate.
+  #   differentiated_unadmixed additionally screens out populations that look
+  #   like a mixture of other candidates, via a triangle-inequality slack test
+  #   plus a greedy convex-mixture residual, then scores what survives by drift.
+  #   Use it when you want drifted, representative populations for distinct
+  #   ancestries rather than whatever sits furthest out on the tree.
+  auto_source_pick_method: differentiated_unadmixed
   auto_source_broad_k: 0
   auto_source_max_per_broad_clade: 1
   auto_source_min_tree_dist_quantile: 0.75
@@ -123,6 +188,44 @@ mixture:
   #   relative_pendant: score pendant length relative to root-to-tip depth
   auto_source_min_cluster_size: 3
   auto_source_relative_pendant: false
+  # differentiated_unadmixed knobs: slack quantile for the triangle test (lower
+  # = stricter about calling a population admixed), and how much drift counts
+  # relative to differentiation when ranking the survivors.
+  auto_source_admix_slack_quantile: 0.5
+  auto_source_drift_weight: 0.5
+
+  # ---- residual diagnostic (post-hoc; no re-fit) --------------------------
+  # A source must be at least this quantile of the distality distribution (mean
+  # TVD from the target mass) before the absorber / poor_fit flags apply.
+  diag_distal_quantile: 0.5
+  #
+  # Per-stratum sink test. Target clusters are cut into diag_sink_strata groups
+  # by ward.D2 on the TVD between their palette profiles -- derived from the
+  # data, so no metadata region column is needed and it works on a default panel
+  # whose pop_id is a bare cluster label. Inside a stratum, a source whose
+  # weight rises with res_norm is buying down misfit rather than describing
+  # ancestry: an unfitted intercept, invisible to the panel-wide coupling
+  # statistic because it only fires where the panel lacks a proximate source.
+  #
+  # diag_sink_strata: too few and a large stratum becomes a catch-all whose
+  # foreign sub-blocks misattribute the flag; too many and each stratum gets
+  # homogeneous enough that its dominant source tracks the stratum's own
+  # internal cline. 12 is stable on a worldwide panel; the uniqueness rule below
+  # is what holds the test steady across the range.
+  #
+  # diag_sink_min_gap: a sink must be the ONLY source over diag_sink_min_r in
+  # its stratum and lead the runner-up by this margin. A stratum hiding a
+  # badly-fit sub-block pulls every distant source onto it at once; that is a
+  # property of the stratum and is reported separately as shared_gradient.
+  #
+  # Endogamy coupling is reported (r_endog) but never sufficient on its own: a
+  # genuinely proximate source legitimately takes more weight in the more
+  # inbred, less admixed members of its own stratum.
+  diag_sink_strata: 12
+  diag_sink_min_r: 0.4
+  diag_sink_min_n: 15
+  diag_sink_min_p: 0.01
+  diag_sink_min_gap: 0.15
   mcmc_iter: 200000
   burnin: 20000
   thin: 5

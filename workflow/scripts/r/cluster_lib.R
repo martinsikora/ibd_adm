@@ -55,15 +55,39 @@ read_ibd_matrix <- function(files, inds, threads = 1L) {
 ## --------------------------------------------------
 ## stage 2: feature transforms (cluster_hc.R:204-216)
 
-## Column z-score (per partner sample) then per-sample row L2 normalization,
-## each applied only if requested. Returns the transformed matrix.
+## Column z-score (per partner sample) or column scaling without centring, then
+## per-sample row L2 normalization; each applied only if requested. Returns the
+## transformed matrix.
+##
+## standardize_features (centre + scale) must not be used with cosine: centring
+## turns a low row total into a systematic negative offset across all columns, so
+## every low-sharing sample points in the same "below average" direction and they
+## cluster by sharing magnitude rather than ancestry.
+##
+## scale_features divides each column by its SD *without* centring. It keeps the
+## part of the z-score that is useful -- up-weighting low-variance donor columns,
+## which is what resolves regions whose sharing is concentrated in a few donors
+## (Americas populations lost resolution under raw cosine: the Andean and
+## Mesoamerican blocks merged from 6/4/9 clusters into one each) -- while adding
+## no constant to any coordinate, so the offset artifact cannot arise.
 apply_feature_transforms <- function(m, standardize_features = FALSE,
-                                     normalize_ibd_vectors = FALSE) {
+                                     normalize_ibd_vectors = FALSE,
+                                     scale_features = FALSE) {
+  if (isTRUE(standardize_features) && isTRUE(scale_features)) {
+    stop("standardize_features and scale_features are mutually exclusive")
+  }
   if (isTRUE(standardize_features)) {
     col_means <- colMeans(m)
     col_sds <- apply(m, 2, sd)
     col_sds[col_sds == 0] <- 1
     m <- sweep(m, 2, col_means, "-")
+    m <- sweep(m, 2, col_sds, "/")
+  }
+  if (isTRUE(scale_features)) {
+    n <- nrow(m)
+    mu <- colMeans(m)
+    col_sds <- sqrt(pmax((colSums(m^2) - n * mu^2) / (n - 1), 0))
+    col_sds[col_sds == 0] <- 1
     m <- sweep(m, 2, col_sds, "/")
   }
   if (isTRUE(normalize_ibd_vectors)) {

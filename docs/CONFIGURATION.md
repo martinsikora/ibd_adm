@@ -62,12 +62,17 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 | `clustering.clust_method` | `ward.D2` | hclust method | Agglomeration method; part of the output cache tag. |
 | `clustering.dist_method` | `cosine` | distance metric | Distance on the IBD feature vectors; part of the cache tag. |
 | `clustering.normalize_ibd_vectors` | `false` | bool | L2-normalize each sample's row vector before the distance. |
-| `clustering.standardize_features` | `true` | bool | Z-score each feature (column). Combined with the above, sets the transform tag (`raw`/`norm`/`zscore`/`zscorenorm`). Both are redundant under cosine. |
-| `clustering.cl_size` | `2` | int | `dynamicTreeCut` minimum cluster size. |
+| `clustering.standardize_features` | `false` | bool | Z-score each feature (centre **and** scale). **Keep off under cosine** — centring turns a low row total into a systematic negative offset in every coordinate, so all low-sharing samples point the same way and cluster together regardless of ancestry. Mutually exclusive with `scale_features`. |
+| `clustering.scale_features` | `true` | bool | Divide each feature by its SD **without** centring. Keeps the useful half of the z-score (up-weighting low-variance donor columns) without the offset. Sets the transform tag together with the two above (`raw`/`norm`/`scale`/`scalenorm`/`zscore`/`zscorenorm`). |
+| `clustering.cl_size` | `3` | int | `dynamicTreeCut` minimum cluster size. At `2` the cut emits 1–2 member clusters, which are not resolved sub-populations and account for most of the apparent shredding of endogamous groups at finer cuts. |
 | `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit` sensitivity. |
 | `clustering.knn` | `7` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
 | `clustering.threads` | `32` | int | Threads for the matrix/distance/clustering rules. |
 | `clustering.default_panel` | `default` (fallback) | string | Name of the default panel whose clusters seed aggregation. |
+| `clustering.gated_cut.enabled` | `false` | bool | Build one labelling from a coarse and a fine cut of the same tree, taking fine labels only where a coarse cluster carries enough IBD to support them. Emits panel `cluster_h{base}g{fine}_{tag}`. |
+| `clustering.gated_cut.base_height` | `0.5` | number | Coarse cut height (the fallback label). |
+| `clustering.gated_cut.fine_height` | `0.2` | number | Fine cut height; must be **below** `base_height`. Neither height need appear in `heights`. |
+| `clustering.gated_cut.min_sharing` | `250000` | cM ≥ 0 | Median per-sample genome-wide IBD a coarse cluster needs before its finer subdivision is used. A data-sufficiency gate, not a split-quality test. |
 
 ## `aggregation`
 
@@ -96,10 +101,11 @@ perceptually spread colour + shape map from a 3-D embedding of the TVD matrix.
 | `aggregation.color_tsne_lum_min` | `15` | number | Min HCL luminance. |
 | `aggregation.color_tsne_lum_max` | `95` | number | Max HCL luminance (**must exceed** the min). |
 | `aggregation.color_tsne_gamma_c` | `0.5` | number > 0 | Chroma gamma. |
-| `aggregation.color_tsne_gamma_l` | `0.8` | number > 0 | Luminance gamma. |
+| `aggregation.color_tsne_gamma_l` | `0.6` | number > 0 | Luminance gamma (tuned for `lc_spread: rank`; use `0.8` with `raw`). |
 | `aggregation.color_tsne_hue_scale` | `0.9` | number | Hue scaling factor. |
 | `aggregation.color_tsne_hue_rotate` | `25` | degrees | Hue rotation. |
 | `aggregation.color_tsne_hue_spread` | `rank` | `raw` \| `range` \| `rank` | Hue spreading mode. |
+| `aggregation.color_tsne_lc_spread` | `rank` | `raw` \| `rank` | Chroma/luminance spreading mode. With `raw` (min–max), a skewed embedding axis bunches most clusters at the dark, desaturated end and the palette loses its reds and yellows to maroon and olive. |
 
 ## `mixture`
 
@@ -145,7 +151,7 @@ populations from the TVD / neighbour-joining tree.
 |-----|---------|----------------|----------|
 | `mixture.auto_k_min` | `15` | int ≥ 2 | Min number of source clusters. |
 | `mixture.auto_k_max` | `20` | int ≥ `auto_k_min` | Max number of source clusters (`2 ≤ min ≤ max` enforced). |
-| `mixture.auto_source_pick_method` | `differentiated_spread` | `tree_spread` \| `farthest` \| `cluster_medoids` \| `differentiated` \| `differentiated_spread` | Source-picking strategy. |
+| `mixture.auto_source_pick_method` | `differentiated_unadmixed` | `tree_spread` \| `farthest` \| `cluster_medoids` \| `differentiated` \| `differentiated_spread` \| `differentiated_unadmixed` | Source-picking strategy. `differentiated_unadmixed` screens out populations that look like a mixture of other candidates (triangle-inequality slack + greedy convex-mixture residual), then ranks survivors by drift. |
 | `mixture.auto_source_broad_k` | `0` | int | Number of broad clades to partition into (`0` = auto). |
 | `mixture.auto_source_max_per_broad_clade` | `1` | int ≥ 1 | Max sources per broad clade. |
 | `mixture.auto_source_min_tree_dist_quantile` | `0.75` | [0, 1] | Min pairwise tree-distance quantile between chosen sources. |
@@ -153,6 +159,23 @@ populations from the TVD / neighbour-joining tree.
 | `mixture.auto_source_max_per_label_prefix` | `1` | int ≥ 0 | Max sources sharing a label prefix. |
 | `mixture.auto_source_min_cluster_size` | `3` | int ≥ 1 | (differentiated methods) drop tips below this size. |
 | `mixture.auto_source_relative_pendant` | `false` | bool | Score pendant length relative to root-to-tip depth. |
+| `mixture.auto_source_admix_slack_quantile` | `0.5` | [0, 1] | (`differentiated_unadmixed`) triangle-slack quantile; lower is stricter about calling a population admixed. |
+| `mixture.auto_source_drift_weight` | `0.5` | number ≥ 0 | (`differentiated_unadmixed`) weight of drift vs differentiation when ranking survivors. |
+
+### Residual diagnostic
+
+Post-hoc, no re-fit. Writes `*.cluster_residuals.tsv`, `*.source_flags.tsv` and `*.source_sink_by_stratum.tsv` per mixture panel.
+
+| key | default | type | meaning |
+|---|---|---|---|
+| `mixture.diag_distal_quantile` | `0.5` | [0, 1] | A source must reach this quantile of the distality distribution (mean TVD from the target mass) before the `absorber` / `poor_fit` flags apply. |
+| `mixture.diag_sink_strata` | `12` | int ≥ 1 | Number of strata the target clusters are cut into (ward.D2 on the TVD between palette profiles — data-driven, no metadata region column). Too few and a large stratum becomes a catch-all whose foreign sub-blocks misattribute the flag; too many and each stratum's dominant source starts tracking its internal cline. |
+| `mixture.diag_sink_min_r` | `0.4` | (0, 1] | Correlation with `res_norm`, within a stratum, at which a source counts as a sink — weight that buys down misfit rather than describing ancestry. |
+| `mixture.diag_sink_min_n` | `15` | int ≥ 3 | Minimum targets in a stratum before its correlations are trusted. |
+| `mixture.diag_sink_min_p` | `0.01` | [0, 1] | Minimum mean weight in the stratum; below this a source has no material influence there. |
+| `mixture.diag_sink_min_gap` | `0.15` | [0, 2] | A sink must be the **only** source over `diag_sink_min_r` in its stratum and lead the runner-up by this margin. Ties mean the stratum hides a badly-fit sub-block that pulls every distant source at once, reported as `shared_gradient` instead. |
+
+Endogamy coupling (`r_endog`, weight vs within-cluster IBD enrichment) is reported but never sufficient alone: a proximate source legitimately takes more weight in the more inbred, less admixed members of its own stratum.
 
 ## `ibd_window_peaks`
 
@@ -195,13 +218,16 @@ peaks. **Disabled by default.**
 
 - `aggregation.color_map_embedding` ∈ {`tsne3`, `mds3`}
 - `aggregation.color_map_mapping` ∈ {`radial`, `pca_axes`}
-- `aggregation.color_tsne_hue_spread` ∈ {`raw`, `range`, `rank`}
+- `aggregation.color_tsne_hue_spread` ∈ {`raw`, `range`, `rank`}; `aggregation.color_tsne_lc_spread` ∈ {`raw`, `rank`}
 - `aggregation.color_tsne_chroma_max` > `..._chroma_min`; `..._lum_max` > `..._lum_min`
 - `aggregation.color_tsne_gamma_c` > 0 and `..._gamma_l` > 0
 - `aggregation.color_map_shapes` — non-empty list of integers
 - `mixture.method` ∈ {`nnls`, `bayesian`, `both`} (or a list of `nnls`/`bayesian`)
-- `mixture.auto_source_pick_method` ∈ {`tree_spread`, `farthest`, `cluster_medoids`, `differentiated`, `differentiated_spread`}
+- `mixture.auto_source_pick_method` ∈ {`tree_spread`, `farthest`, `cluster_medoids`, `differentiated`, `differentiated_spread`, `differentiated_unadmixed`}
 - `2 ≤ mixture.auto_k_min ≤ mixture.auto_k_max`
 - `mixture.auto_source_min_tree_dist_quantile` ∈ [0, 1]
 - `mixture.auto_source_max_per_broad_clade` ≥ 1; `..._min_cluster_size` ≥ 1
+- `clustering.standardize_features` and `clustering.scale_features` are mutually exclusive
+- `clustering.gated_cut`: `fine_height` < `base_height`, both numeric, `min_sharing` ≥ 0; requires the default clustering pipeline
+- `mixture.diag_sink_strata` ≥ 1; `diag_sink_min_r` ∈ (0, 1]; `diag_sink_min_n` ≥ 3; `diag_sink_min_p` ∈ [0, 1]; `diag_sink_min_gap` ∈ [0, 2]
 - `ibd_window_peaks.norm_mode` ∈ {`none`, `pop_size`}

@@ -130,7 +130,7 @@ if MIX_ENABLED and MIX_MARKER_FILE:
 
     MIXMODEL_DIAG = []
     if MIX_DIAG_ENABLED:
-        _diag_suffixes = ("source_flags", "cluster_residuals")
+        _diag_suffixes = ("source_flags", "cluster_residuals", "source_sink_by_stratum")
         if ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             for _s in _diag_suffixes:
                 MIXMODEL_DIAG += expand(
@@ -254,6 +254,8 @@ if MIX_ENABLED and MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:
             source_max_per_label_prefix=MIX_AUTO_SOURCE_MAX_PER_LABEL_PREFIX,
             source_min_cluster_size=MIX_AUTO_SOURCE_MIN_CLUSTER_SIZE,
             source_relative_pendant=MIX_AUTO_SOURCE_RELATIVE_PENDANT,
+            source_admix_slack_quantile=MIX_AUTO_SOURCE_ADMIX_SLACK_QUANTILE,
+            source_drift_weight=MIX_AUTO_SOURCE_DRIFT_WEIGHT,
         priority:
             85
         shell:
@@ -265,6 +267,8 @@ if MIX_ENABLED and MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:
               --source_min_tree_dist_quantile {params.source_min_tree_dist_quantile} \
               --source_label_prefix_parts {params.source_label_prefix_parts} --source_max_per_label_prefix {params.source_max_per_label_prefix} \
               --source_min_cluster_size {params.source_min_cluster_size} {params.source_relative_pendant} \
+              --source_admix_slack_quantile {params.source_admix_slack_quantile} \
+              --source_drift_weight {params.source_drift_weight} \
               -o {output.mix}
             """
 
@@ -450,15 +454,24 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
         output:
             flags=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv",
             resid=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.cluster_residuals.tsv",
+            sink=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_sink_by_stratum.tsv",
         params:
             prefix=lambda wc: mix_diag_prefix(panel_mix_dir(wc.agg_panel), wc.mix_panel),
+            distal_q=MIX_DIAG_DISTAL_QUANTILE,
+            sink_strata=MIX_DIAG_SINK_STRATA,
+            sink_min_r=MIX_DIAG_SINK_MIN_R,
+            sink_min_n=MIX_DIAG_SINK_MIN_N,
+            sink_min_p=MIX_DIAG_SINK_MIN_P,
+            sink_min_gap=MIX_DIAG_SINK_MIN_GAP,
         priority:
             55
         shell:
             """
             Rscript workflow/scripts/r/mixmodel_residual_diagnostic.R \
               {input.palette} {input.src} {input.val} {input.sample_file} \
-              {input.nnls} {input.bayesian} {input.valids} {params.prefix}
+              {input.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
+              {params.sink_strata} {params.sink_min_r} {params.sink_min_n} \
+              {params.sink_min_p} {params.sink_min_gap}
             """
 
 if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
@@ -504,13 +517,22 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
         output:
             flags=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv",
             resid=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.cluster_residuals.tsv",
+            sink=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_sink_by_stratum.tsv",
         params:
             prefix=lambda wc: mix_diag_prefix(cluster_mix_dir(wc.height), wc.mix_panel),
+            distal_q=MIX_DIAG_DISTAL_QUANTILE,
+            sink_strata=MIX_DIAG_SINK_STRATA,
+            sink_min_r=MIX_DIAG_SINK_MIN_R,
+            sink_min_n=MIX_DIAG_SINK_MIN_N,
+            sink_min_p=MIX_DIAG_SINK_MIN_P,
+            sink_min_gap=MIX_DIAG_SINK_MIN_GAP,
         priority:
             55
         shell:
             """
             Rscript workflow/scripts/r/mixmodel_residual_diagnostic.R \
               {input.palette} {input.src} {input.val} {input.sample_file} \
-              {input.nnls} {input.bayesian} {input.valids} {params.prefix}
+              {input.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
+              {params.sink_strata} {params.sink_min_r} {params.sink_min_n} \
+              {params.sink_min_p} {params.sink_min_gap}
             """

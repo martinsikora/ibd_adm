@@ -46,6 +46,14 @@ CLUSTER_NORMALIZE_IBD_VECTORS = bool(
 CLUSTER_STANDARDIZE_FEATURES = bool(
     config.get("clustering", {}).get("standardize_features", False)
 )
+CLUSTER_SCALE_FEATURES = bool(
+    config.get("clustering", {}).get("scale_features", False)
+)
+if CLUSTER_STANDARDIZE_FEATURES and CLUSTER_SCALE_FEATURES:
+    raise ValueError(
+        "clustering.standardize_features and clustering.scale_features are "
+        "mutually exclusive (centre+scale vs scale-only)"
+    )
 CLUSTER_CL_SIZE = int(config.get("clustering", {}).get("cl_size", 2))
 CLUSTER_DEEP_SPLIT = int(config.get("clustering", {}).get("deep_split", 3))
 CLUSTER_KNN = int(config.get("clustering", {}).get("knn", 1))
@@ -61,6 +69,10 @@ if CLUSTER_STANDARDIZE_FEATURES and CLUSTER_NORMALIZE_IBD_VECTORS:
     CLUSTER_NORM_TAG = "zscorenorm"
 elif CLUSTER_STANDARDIZE_FEATURES:
     CLUSTER_NORM_TAG = "zscore"
+elif CLUSTER_SCALE_FEATURES and CLUSTER_NORMALIZE_IBD_VECTORS:
+    CLUSTER_NORM_TAG = "scalenorm"
+elif CLUSTER_SCALE_FEATURES:
+    CLUSTER_NORM_TAG = "scale"
 elif CLUSTER_NORMALIZE_IBD_VECTORS:
     CLUSTER_NORM_TAG = "norm"
 else:
@@ -87,6 +99,48 @@ def cluster_panel_name(height):
     return f"cluster_h{height}_{CLUSTER_OUTPUT_TAG}"
 
 CLUSTER_DEFAULT_PANELS = [cluster_panel_name(h) for h in CLUSTER_HEIGHTS]
+
+# ---- sharing-gated adaptive cut -------------------------------------------
+# Combines a coarse and a fine cut of the same tree, taking the fine labels only
+# where a coarse cluster carries enough IBD to support finer distinctions. See
+# workflow/scripts/r/cluster_cut_gated.R for the rationale and its limits.
+GATED_CFG = config.get("clustering", {}).get("gated_cut", {}) or {}
+GATED_ENABLED = bool(GATED_CFG.get("enabled", False))
+GATED_BASE_HEIGHT = str(GATED_CFG.get("base_height", ""))
+GATED_FINE_HEIGHT = str(GATED_CFG.get("fine_height", ""))
+GATED_MIN_SHARING = float(GATED_CFG.get("min_sharing", 250000))
+
+if GATED_ENABLED:
+    if not ENABLE_DEFAULT_PIPELINE:
+        raise ValueError(
+            "clustering.gated_cut.enabled requires the default clustering "
+            "pipeline (clustering.enabled + at least one height)"
+        )
+    # Neither height has to appear in `heights`: cut_tree carries a {height}
+    # wildcard, so requesting its clusters.tsv builds that cut on demand. Keep
+    # the fine height OUT of `heights` unless you want it aggregated -- every
+    # entry there also gets its own 22-chromosome aggregation, PCA and mixmodel.
+    try:
+        _base_f, _fine_f = float(GATED_BASE_HEIGHT), float(GATED_FINE_HEIGHT)
+    except ValueError:
+        raise ValueError(
+            "clustering.gated_cut base_height and fine_height must be numeric "
+            f"(got {GATED_BASE_HEIGHT!r} and {GATED_FINE_HEIGHT!r})"
+        )
+    if _fine_f >= _base_f:
+        raise ValueError(
+            "clustering.gated_cut.fine_height must be BELOW base_height "
+            "(a lower cut height is the finer one); got "
+            f"base={GATED_BASE_HEIGHT} fine={GATED_FINE_HEIGHT}"
+        )
+    if GATED_MIN_SHARING < 0:
+        raise ValueError("clustering.gated_cut.min_sharing must be >= 0")
+
+def gated_panel_name():
+    # e.g. cluster_h0.5g0.2_dcosine_nscale_mward_D2
+    return (
+        f"cluster_h{GATED_BASE_HEIGHT}g{GATED_FINE_HEIGHT}_{CLUSTER_OUTPUT_TAG}"
+    )
 
 CLUSTER_PANELS = {
     "default": {
@@ -141,6 +195,9 @@ if COLOR_TSNE_GAMMA_C <= 0 or COLOR_TSNE_GAMMA_L <= 0:
     raise ValueError("aggregation.color_tsne_gamma_c and color_tsne_gamma_l must be > 0")
 if COLOR_TSNE_HUE_SPREAD not in ("raw", "range", "rank"):
     raise ValueError("aggregation.color_tsne_hue_spread must be one of: raw, range, rank")
+COLOR_TSNE_LC_SPREAD = str(config.get("aggregation", {}).get("color_tsne_lc_spread", "raw"))
+if COLOR_TSNE_LC_SPREAD not in ("raw", "rank"):
+    raise ValueError("aggregation.color_tsne_lc_spread must be one of: raw, rank")
 _default_mix_files = glob.glob(
     os.path.join(PANELS_CFG_DIR, "default", "mixture_*.tsv")
 )
@@ -179,6 +236,32 @@ CUSTOM_PANELS_WITH_COLOR = [
     p for p in CUSTOM_PANELS
     if os.path.exists(os.path.join(PANELS_CFG_DIR, p, "color_map.tsv"))
 ]
+
+MIX_DIAG_DISTAL_QUANTILE = float(
+    config.get("mixture", {}).get("diag_distal_quantile", 0.5)
+)
+if MIX_DIAG_DISTAL_QUANTILE < 0 or MIX_DIAG_DISTAL_QUANTILE > 1:
+    raise ValueError("mixture.diag_distal_quantile must be in [0, 1]")
+
+# per-stratum sink test: catches a source that is an unfitted intercept rather
+# than an ancestry component, absorbing misfit/drift inside the one stratum
+# where the panel has no proximate source. Strata are cut from the palette
+# geometry, so no metadata region column is involved.
+MIX_DIAG_SINK_STRATA = int(config.get("mixture", {}).get("diag_sink_strata", 12))
+MIX_DIAG_SINK_MIN_R = float(config.get("mixture", {}).get("diag_sink_min_r", 0.4))
+MIX_DIAG_SINK_MIN_N = int(config.get("mixture", {}).get("diag_sink_min_n", 15))
+MIX_DIAG_SINK_MIN_P = float(config.get("mixture", {}).get("diag_sink_min_p", 0.01))
+MIX_DIAG_SINK_MIN_GAP = float(config.get("mixture", {}).get("diag_sink_min_gap", 0.15))
+if MIX_DIAG_SINK_STRATA < 1:
+    raise ValueError("mixture.diag_sink_strata must be >= 1")
+if not 0 < MIX_DIAG_SINK_MIN_R <= 1:
+    raise ValueError("mixture.diag_sink_min_r must be in (0, 1]")
+if MIX_DIAG_SINK_MIN_N < 3:
+    raise ValueError("mixture.diag_sink_min_n must be >= 3")
+if not 0 <= MIX_DIAG_SINK_MIN_P <= 1:
+    raise ValueError("mixture.diag_sink_min_p must be in [0, 1]")
+if not 0 <= MIX_DIAG_SINK_MIN_GAP <= 2:
+    raise ValueError("mixture.diag_sink_min_gap must be in [0, 2]")
 
 MIX_MARKER_FILE = (
     config.get("mixture", {}).get("marker_file")
@@ -225,11 +308,12 @@ MIX_AUTO_SOURCE_PICK_METHOD = str(
     config.get("mixture", {}).get("auto_source_pick_method", "tree_spread")
 ).lower()
 if MIX_AUTO_SOURCE_PICK_METHOD not in (
-    "tree_spread", "farthest", "cluster_medoids", "differentiated", "differentiated_spread"
+    "tree_spread", "farthest", "cluster_medoids", "differentiated",
+    "differentiated_spread", "differentiated_unadmixed"
 ):
     raise ValueError(
         "mixture.auto_source_pick_method must be one of: tree_spread, farthest, "
-        "cluster_medoids, differentiated, differentiated_spread"
+        "cluster_medoids, differentiated, differentiated_spread, differentiated_unadmixed"
     )
 MIX_AUTO_SOURCE_BROAD_K = int(config.get("mixture", {}).get("auto_source_broad_k", 0))
 MIX_AUTO_SOURCE_MAX_PER_BROAD_CLADE = int(
@@ -262,6 +346,17 @@ MIX_AUTO_SOURCE_RELATIVE_PENDANT = (
     if bool(config.get("mixture", {}).get("auto_source_relative_pendant", False))
     else ""
 )
+# for source_pick_method differentiated_unadmixed: admixture (betweenness) screen
+MIX_AUTO_SOURCE_ADMIX_SLACK_QUANTILE = float(
+    config.get("mixture", {}).get("auto_source_admix_slack_quantile", 0.5)
+)
+if MIX_AUTO_SOURCE_ADMIX_SLACK_QUANTILE < 0 or MIX_AUTO_SOURCE_ADMIX_SLACK_QUANTILE > 1:
+    raise ValueError("mixture.auto_source_admix_slack_quantile must be in [0, 1]")
+MIX_AUTO_SOURCE_DRIFT_WEIGHT = float(
+    config.get("mixture", {}).get("auto_source_drift_weight", 0.5)
+)
+if MIX_AUTO_SOURCE_DRIFT_WEIGHT < 0:
+    raise ValueError("mixture.auto_source_drift_weight must be >= 0")
 
 PEAK_CFG = config.get("ibd_window_peaks", {})
 PEAK_ENABLED = bool(PEAK_CFG.get("enabled", False))

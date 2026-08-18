@@ -8,6 +8,10 @@ def cluster_clust_dir(height):
     return f"{PANELS_DIR}/{cluster_panel_name(height)}/clustering"
 
 
+def gated_clust_dir():
+    return f"{PANELS_DIR}/{gated_panel_name()}/clustering"
+
+
 CLUSTER_OUTPUTS = []
 if ENABLE_DEFAULT_PIPELINE:
     for _panel in CLUSTER_PANELS:
@@ -20,6 +24,18 @@ if ENABLE_DEFAULT_PIPELINE:
                 f"{cluster_clust_dir(_height)}/{_panel}."
                 f"{PREFIX}.clusters_heatmap.pdf",
             ]
+
+if GATED_ENABLED:
+    # The gated panel dir is cluster_h{base}g{fine}_{TAG}, which plot_clusters'
+    # {height} wildcard matches as "0.5g0.2", so the same rule renders it -- the
+    # dendrogram is just res_hc coloured by cluster_id, which is well defined for
+    # a mixed-depth labelling. cluster_plot.R reads cut_height as character and
+    # matches it tolerantly so the non-numeric tag survives.
+    CLUSTER_OUTPUTS += [
+        f"{gated_clust_dir()}/default.{PREFIX}.clusters.tsv",
+        f"{gated_clust_dir()}/default.{PREFIX}.clusters_hierarchy.pdf",
+        f"{gated_clust_dir()}/default.{PREFIX}.clusters_heatmap.pdf",
+    ]
 
 
 if ENABLE_DEFAULT_PIPELINE:
@@ -55,6 +71,7 @@ if ENABLE_DEFAULT_PIPELINE:
             standardize_flag=(
                 "--standardize_features" if CLUSTER_STANDARDIZE_FEATURES else ""
             ),
+            scale_flag=("--scale_features" if CLUSTER_SCALE_FEATURES else ""),
         threads:
             CLUSTER_THREADS
         resources:
@@ -64,7 +81,7 @@ if ENABLE_DEFAULT_PIPELINE:
             """
             Rscript workflow/scripts/r/cluster_distance.R \
             --in {input.rds} --out {output.rds} --dist_method {params.dist_method} \
-            {params.normalize_flag} {params.standardize_flag} --threads {threads}
+            {params.normalize_flag} {params.standardize_flag} {params.scale_flag} --threads {threads}
             """
 
     # Stage 3: hierarchical clustering + tree hierarchy (shared across heights)
@@ -111,6 +128,41 @@ if ENABLE_DEFAULT_PIPELINE:
             -s {input.sample_file} --out_tsv {output.tsv} --height {params.height} \
             --cl_size {params.cl_size} --deep_split {params.deep_split} --knn {params.knn}
             """
+
+    # Stage 4b: sharing-gated cut -- one labelling combining the coarse and fine
+    # cuts, taking fine labels only where a coarse cluster carries enough IBD to
+    # support them. Cheap (reads two clusters.tsv + m_raw row sums), so it is a
+    # separate rule rather than folded into cut_tree.
+    #
+    # The gated panel dir (cluster_h0.5g0.2_TAG) also matches cut_tree's
+    # {height} wildcard, so both rules can claim its clusters.tsv. Make the
+    # choice explicit rather than relying on resolution order.
+    if GATED_ENABLED:
+        ruleorder: cut_tree_gated > cut_tree
+
+    if GATED_ENABLED:
+        rule cut_tree_gated:
+            input:
+                base=f"{cluster_clust_dir(GATED_BASE_HEIGHT)}/default.{PREFIX}.clusters.tsv",
+                fine=f"{cluster_clust_dir(GATED_FINE_HEIGHT)}/default.{PREFIX}.clusters.tsv",
+                matrix=CLUSTER_MRAW_RDS,
+            output:
+                tsv=f"{gated_clust_dir()}/default.{PREFIX}.clusters.tsv",
+            params:
+                base_height=GATED_BASE_HEIGHT,
+                fine_height=GATED_FINE_HEIGHT,
+                min_sharing=GATED_MIN_SHARING,
+            resources:
+                mem_mb=40000,
+                runtime=60,
+            shell:
+                """
+                mkdir -p $(dirname {output.tsv})
+                Rscript workflow/scripts/r/cluster_cut_gated.R \
+                --base {input.base} --fine {input.fine} --matrix {input.matrix} \
+                --base_height {params.base_height} --fine_height {params.fine_height} \
+                --min_sharing {params.min_sharing} --out {output.tsv}
+                """
 
     # Stage 5: dendrogram + heatmap plots (per height; isolated so re-cutting
     # never regenerates the large heatmap PDF)

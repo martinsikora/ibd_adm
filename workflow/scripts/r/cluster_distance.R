@@ -43,6 +43,9 @@ parser$add_argument("--normalize_ibd_vectors", dest = "normalize_ibd_vectors",
 parser$add_argument("--standardize_features", dest = "standardize_features",
   action = "store_true", default = FALSE,
   help = "Z-score standardize each feature before distance calculation")
+parser$add_argument("--scale_features", dest = "scale_features",
+  action = "store_true", default = FALSE,
+  help = "Scale each feature by its SD WITHOUT centring (safe under cosine)")
 parser$add_argument("-t", "--threads", dest = "threads", type = "integer",
   default = 1L, help = "Number of threads [default %(default)s]")
 args <- parser$parse_args()
@@ -54,7 +57,8 @@ cat("__ applying feature transforms __\n")
 m_use <- apply_feature_transforms(
   m_use,
   standardize_features = args$standardize_features,
-  normalize_ibd_vectors = args$normalize_ibd_vectors
+  normalize_ibd_vectors = args$normalize_ibd_vectors,
+  scale_features = args$scale_features
 )
 
 cat("__ computing distance matrix __\n")

@@ -181,6 +181,20 @@ parser$add_argument("--hue_spread_mode",
   help = "Hue spreading mode: raw, range, rank (default: range)"
 )
 
+parser$add_argument("--lc_spread_mode",
+  action = "store",
+  dest = "lc_spread_mode",
+  type = "character",
+  default = "raw",
+  help = paste(
+    "Chroma/luminance spreading: raw (min-max of the embedding axes) or rank",
+    "(quantile-spread, the analogue of hue_spread_mode rank). raw is sensitive",
+    "to a skewed embedding -- a few extreme values on the luminance axis squash",
+    "every other cluster into the dark end, which kills the hues that need high",
+    "luminance (yellow) or high chroma (red). (default: raw)"
+  )
+)
+
 parser$add_argument("--embedding",
   action = "store",
   dest = "embedding",
@@ -209,6 +223,9 @@ if (args$gamma_c <= 0 || args$gamma_l <= 0) {
 }
 if (!(args$hue_spread_mode %in% c("raw", "range", "rank"))) {
   stop("--hue_spread_mode must be one of: raw, range, rank")
+}
+if (!(args$lc_spread_mode %in% c("raw", "rank"))) {
+  stop("--lc_spread_mode must be one of: raw, rank")
 }
 if (!(args$embedding %in% c("tsne3", "mds3"))) {
   stop("--embedding must be one of: tsne3, mds3")
@@ -305,6 +322,26 @@ if (args$mapping == "pca_axes") {
   l_norm <- scale01(coords$z)
 }
 h <- (h * args$hue_scale + args$hue_rotate) %% 360
+
+## Quantile-spread chroma and luminance. scale01() is min-max, so a skewed
+## embedding axis (a few extreme values) leaves most clusters bunched at the
+## dark, desaturated end -- on the h0.5 panel that dropped the median luminance
+## from 68 to 54 and left 0.4% vivid yellows and no vivid reds, even though the
+## red and yellow HUE bins were as populated as before. Ranking uses the full
+## chroma/luminance range whatever the axis distribution, while preserving the
+## ordering those axes encode.
+if (args$lc_spread_mode == "rank") {
+  rank01 <- function(x) {
+    n <- length(x)
+    if (n <= 1) {
+      return(rep(0.5, n))
+    }
+    (rank(x, ties.method = "average") - 1) / (n - 1)
+  }
+  c_norm <- rank01(c_norm)
+  l_norm <- rank01(l_norm)
+}
+
 c_norm <- c_norm^args$gamma_c
 l_norm <- l_norm^args$gamma_l
 

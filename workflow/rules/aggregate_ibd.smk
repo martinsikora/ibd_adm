@@ -175,6 +175,7 @@ if ENABLE_DEFAULT_PIPELINE:
             hue_scale=COLOR_TSNE_HUE_SCALE,
             hue_rotate=COLOR_TSNE_HUE_ROTATE,
             hue_spread=COLOR_TSNE_HUE_SPREAD,
+            lc_spread=COLOR_TSNE_LC_SPREAD,
             shapes=COLOR_MAP_SHAPES_ARG,
             embedding=COLOR_MAP_EMBEDDING,
             mapping=COLOR_MAP_MAPPING,
@@ -183,7 +184,7 @@ if ENABLE_DEFAULT_PIPELINE:
         shell:
             """
             mkdir -p $(dirname {output.cmap})
-            Rscript workflow/scripts/r/make_color_map_mds.R -i {input.tsv} -o {output.cmap} -k 8 --shapes {params.shapes} --embedding {params.embedding} --mapping {params.mapping} --chroma_min {params.chroma_min} --chroma_max {params.chroma_max} --lum_min {params.lum_min} --lum_max {params.lum_max} --gamma_c {params.gamma_c} --gamma_l {params.gamma_l} --hue_scale {params.hue_scale} --hue_rotate {params.hue_rotate} --hue_spread_mode {params.hue_spread}
+            Rscript workflow/scripts/r/make_color_map_mds.R -i {input.tsv} -o {output.cmap} -k 8 --shapes {params.shapes} --embedding {params.embedding} --mapping {params.mapping} --chroma_min {params.chroma_min} --chroma_max {params.chroma_max} --lum_min {params.lum_min} --lum_max {params.lum_max} --gamma_c {params.gamma_c} --gamma_l {params.gamma_l} --hue_scale {params.hue_scale} --hue_rotate {params.hue_rotate} --hue_spread_mode {params.hue_spread} --lc_spread_mode {params.lc_spread}
             """
 
     rule tvd_plot_default:

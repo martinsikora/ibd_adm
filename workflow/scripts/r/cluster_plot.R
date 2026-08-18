@@ -51,8 +51,12 @@ parser$add_argument("--out_cl", dest = "out_file_cl",
   help = "Output cluster dendrogram plot filename")
 parser$add_argument("--out_hm", dest = "out_file_hm",
   help = "Output heatmap filename")
-parser$add_argument("--height", dest = "height", type = "double",
-  help = "Cut height being plotted")
+parser$add_argument("--height", dest = "height", type = "character",
+  help = paste(
+    "Cut height being plotted. Character, not numeric, so a gated cut's tag",
+    "(e.g. 0.5g0.2) can be plotted too -- it is matched numerically when both",
+    "sides parse as numbers, and as a string otherwise."
+  ))
 parser$add_argument("--full_heatmap", dest = "full_heatmap",
   action = "store_true", default = FALSE,
   help = "Also render the raw-scale heatmap panel (default: log10 only)")
@@ -69,9 +73,17 @@ inds_cl_full <- sample_label |>
 
 res_hc <- readRDS(args$hc_file)
 m_raw <- readRDS(args$matrix_file)
-cl_final <- read_tsv(args$clusters_file, col_types = cols(
-  cut_height = col_double(), .default = col_character()
-))
+## cut_height as character: a gated cut stamps a tag like "0.5g0.2", which
+## col_double() would silently turn into NA and drop every row.
+cl_final <- read_tsv(args$clusters_file, col_types = cols(.default = col_character()))
+
+## tolerant match, mirroring make_agg_panel_from_clusters.py: numeric when both
+## sides are numbers (so "0.50" still matches 0.5), string otherwise.
+height_match <- function(val, target) {
+  vn <- suppressWarnings(as.numeric(val))
+  tn <- suppressWarnings(as.numeric(target))
+  ifelse(!is.na(vn) & !is.na(tn), abs(vn - tn) < 1e-9, as.character(val) == as.character(target))
+}
 
 heights <- args$height
 
@@ -94,7 +106,7 @@ w <- length(inds) %/% 50
 pdf(args$out_file_cl, width = w + 7, height = w + 7)
 walk(unique(heights), ~ {
   cl <- cl_final |>
-    filter(cut_height == .x)
+    filter(height_match(cut_height, .x))
 
   cl_ids <- cl |>
     count(cluster_id, sort = T) |>
@@ -152,7 +164,7 @@ m_l[m_l == -Inf] <- NA
 pdf(file = args$out_file_hm, width = w, height = w)
 walk(unique(heights), ~ {
   cl <- cl_final |>
-    filter(cut_height == .x, group == "cluster_full")
+    filter(height_match(cut_height, .x), group == "cluster_full")
 
   cl_ids <- cl |>
     count(cluster_id, sort = T) |>

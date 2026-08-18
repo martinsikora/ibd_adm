@@ -312,6 +312,230 @@ pick_differentiated_spread <- function(
   as.integer(unique(sel))
 }
 
+
+## --------------------------------------------------
+## unsupervised admixture screen: triangle slack ("betweenness")
+##
+## TVD is a metric, so d(A,P) + d(P,B) - d(A,B) >= 0 always, and equals 0 only
+## when P lies exactly on the A-B geodesic. An admixed population sits between
+## its sources, so its minimum slack over well-separated pairs is near zero;
+## a drifted, unadmixed population is extremal and has large slack. No labels,
+## no allele frequencies -- just the population-by-population TVD matrix.
+##
+## Validated on the ho_20260806 h0.5 panel: the minimising (A, B) pair recovers
+## the real admixture sources -- Siddi_Karnataka 0.008 (Agarwal / Tswana),
+## AfricanAmerican 0.021 (Chuvash / YRI), Aleut 0.002 (Mordovian / NeoAleut),
+## Russian_Archangelsk 0.012 (Russian_Vologda / Yakutia_LateNeolithic) -- while
+## unadmixed sources score an order of magnitude higher: Morocco_HG 0.237,
+## Marianas_Latte 0.235, Jomon 0.165, Haiom 0.157.
+##
+## sep_q restricts A,B to pairs at least that quantile apart, so "between" means
+## between two genuinely distinct ancestries rather than between two neighbours.
+admix_slack <- function(dist_mat, cand_idx, sep_q = 0.75) {
+  n <- nrow(dist_mat)
+  out <- rep(Inf, n)
+  if (length(cand_idx) < 3) {
+    return(out)
+  }
+  Dc <- dist_mat[cand_idx, cand_idx, drop = FALSE]
+  ut <- Dc[upper.tri(Dc)]
+  thr <- if (length(ut) > 0) stats::quantile(ut, sep_q, names = FALSE) else 0
+  far <- Dc >= thr
+  diag(far) <- FALSE
+  if (!any(far)) {
+    return(out)
+  }
+  for (i in seq_len(n)) {
+    a <- dist_mat[i, cand_idx]
+    M <- (outer(a, a, "+") - Dc) / pmax(Dc, 1e-9)
+    M[!far] <- Inf
+    j <- match(i, cand_idx)
+    if (!is.na(j)) {
+      M[j, ] <- Inf
+      M[, j] <- Inf
+    }
+    out[i] <- suppressWarnings(min(M))
+  }
+  out
+}
+
+
+## residual of y after the best convex (sum-to-1, non-negative) fit by the
+## columns of S -- i.e. how much of a candidate's palette position is NOT
+## reproducible as a mixture of the sources already chosen.
+mix_residual <- function(y, S) {
+  if (is.null(S) || ncol(S) == 0) {
+    return(sqrt(sum(y^2)))
+  }
+  if (ncol(S) == 1) {
+    w <- 1
+  } else {
+    w <- tryCatch(
+      lsei::pnnls(S, y, sum = 1)$x,
+      error = function(e) rep(1 / ncol(S), ncol(S))
+    )
+  }
+  sqrt(sum((y - S %*% w)^2))
+}
+
+
+## Differentiated + unadmixed picker.
+##
+## Same target-mass-balanced clade partition as differentiated_spread (so the
+## sources stay proximate to where the target diversity actually is), but the
+## within-clade representative is chosen by three criteria instead of pendant
+## length alone:
+##   1. size guard (min_size), hard;
+##   2. admixture screen -- candidates below the slack quantile are discarded
+##      (hard within the clade, with a documented fallback only if the screen
+##      would leave the clade with no candidate at all);
+##   3. greedy uniqueness -- among the survivors, take the population whose
+##      position is least reproducible as a convex mixture of the sources
+##      already selected, scaled by drift (pendant length) via drift_weight.
+##
+## The greedy step is what makes this robust where a plain "reconstructible by
+## others" test is not: an admixed population lies inside the cone spanned by
+## its parents, so once the parents are selected it can never win. Testing
+## against *all* populations instead would also reject Iran_Neolithic (0.93
+## explained by Turkmenistan_Geoksyur -- redundancy, not admixture) and
+## USA_Beringia (0.97 explained by Mayan + Ojibwa -- ancestry, not admixture).
+## Clades are visited in decreasing target mass so the largest ancestry blocks
+## anchor the greedy sequence first.
+pick_differentiated_unadmixed <- function(
+    dist_mat,
+    pops,
+    k,
+    sizes = NULL,
+    min_size = 1L,
+    relative = FALSE,
+    slack_q = 0.5,
+    sep_q = 0.75,
+    drift_weight = 0.5,
+    mds_dim = 30L,
+    allow_fallback = FALSE
+) {
+  dist_mat <- dist_mat[pops, pops, drop = FALSE]
+  n <- length(pops)
+  if (k >= n) {
+    return(seq_len(n))
+  }
+
+  ## pendant (drift) score per tip
+  tr <- ape::nj(as.dist(dist_mat))
+  ntip <- length(tr$tip.label)
+  is_term <- tr$edge[, 2] <= ntip
+  pend <- numeric(ntip)
+  pend[tr$edge[is_term, 2]] <- tr$edge.length[is_term]
+  pend <- pmax(pend, 0)
+  names(pend) <- tr$tip.label
+  pend <- pend[pops]
+  if (relative) {
+    dep <- ape::node.depth.edgelength(tr)
+    r2t <- dep[seq_len(ntip)]
+    names(r2t) <- tr$tip.label
+    pend <- pend / pmax(r2t[pops], 1e-9)
+  }
+
+  ## size-qualifying candidates
+  sz <- rep(.Machine$integer.max, n)
+  if (!is.null(sizes)) {
+    s <- as.integer(sizes[pops])
+    s[is.na(s)] <- 0L
+    sz <- s
+  }
+  cand_idx <- which(sz >= min_size)
+  if (length(cand_idx) < 3) {
+    cand_idx <- seq_len(n)
+  }
+
+  ## admixture screen
+  slack <- admix_slack(dist_mat, cand_idx, sep_q = sep_q)
+  fin <- slack[cand_idx]
+  fin <- fin[is.finite(fin)]
+  slack_thr <- if (length(fin) > 0) stats::quantile(fin, slack_q, names = FALSE) else -Inf
+  cat(sprintf(
+    "__ admixture screen: slack threshold %.4f (q=%.2f) drops %d of %d candidates __\n",
+    slack_thr, slack_q, sum(slack[cand_idx] < slack_thr), length(cand_idx)
+  ))
+
+  ## metric embedding for the mixture-residual test
+  emb_dim <- max(2L, min(as.integer(mds_dim), n - 1L))
+  Y <- suppressWarnings(stats::cmdscale(as.dist(dist_mat), k = emb_dim))
+  if (is.null(dim(Y)) || ncol(Y) < 2) {
+    Y <- matrix(0, nrow = n, ncol = 2)
+  }
+
+  ## target-mass-balanced clade partition (as in differentiated_spread)
+  w <- rep(1, n)
+  names(w) <- pops
+  if (!is.null(sizes)) {
+    w <- pmax(sz, 0)
+  }
+  hc <- hclust(as.dist(dist_mat), method = "average")
+  merge <- hc$merge
+  leaves_cache <- vector("list", nrow(merge))
+  node_leaves <- function(node) {
+    if (!is.null(leaves_cache[[node]])) {
+      return(leaves_cache[[node]])
+    }
+    res <- integer(0)
+    for (ch in merge[node, ]) {
+      if (ch < 0) res <- c(res, -ch) else res <- c(res, node_leaves(ch))
+    }
+    leaves_cache[[node]] <<- res
+    res
+  }
+  clade_mass <- function(cl) if (cl < 0) w[[-cl]] else sum(w[node_leaves(cl)])
+
+  clades <- list(nrow(merge))
+  while (length(clades) < k) {
+    splittable <- which(vapply(clades, function(x) x > 0, logical(1)))
+    if (length(splittable) == 0) break
+    m <- vapply(clades[splittable], clade_mass, numeric(1))
+    i <- splittable[which.max(m)]
+    ch <- merge[clades[[i]], ]
+    clades <- c(clades[-i], list(ch[1], ch[2]))
+  }
+
+  ## visit clades heaviest-first; greedy unique + drifted representative
+  ord <- order(vapply(clades, clade_mass, numeric(1)), decreasing = TRUE)
+  pmax_pend <- max(pend, na.rm = TRUE)
+  if (!is.finite(pmax_pend) || pmax_pend <= 0) pmax_pend <- 1
+  sel <- integer(0)
+  n_fallback <- 0L
+  for (ci in ord) {
+    cl <- clades[[ci]]
+    idx <- if (cl < 0) (-cl) else node_leaves(cl)
+    idx <- setdiff(idx, sel)
+    if (length(idx) == 0) next
+    keep <- idx[sz[idx] >= min_size & slack[idx] >= slack_thr]
+    if (length(keep) == 0) {
+      ## every candidate in this clade looks admixed. Representing it anyway
+      ## reintroduces exactly what the screen is for (on the h0.5 panel the
+      ## fallback readmitted two AfricanAmerican clusters at slack 0.010/0.021),
+      ## so by default the clade contributes no source and k comes out lower
+      ## than requested. --source_allow_admixed_fallback restores the old
+      ## behaviour of taking the least-bad candidate.
+      n_fallback <- n_fallback + 1L
+      if (!allow_fallback) next
+      keep <- idx[sz[idx] >= min_size]
+    }
+    if (length(keep) == 0) next
+    S <- if (length(sel) > 0) t(Y[sel, , drop = FALSE]) else NULL
+    r <- vapply(keep, function(j) mix_residual(Y[j, ], S), numeric(1))
+    score <- r * (pend[keep] / pmax_pend)^drift_weight
+    sel <- c(sel, keep[which.max(score)])
+  }
+  if (n_fallback > 0) {
+    cat(sprintf(
+      "__ admixture screen emptied %d clade(s); %s __\n",
+      n_fallback,
+      if (allow_fallback) "took the least-bad candidate there" else "left them without a source"
+    ))
+  }
+  as.integer(unique(sel))
+}
+
 pick_tree_spread <- function(
     dist_mat,
     pops,
@@ -464,13 +688,90 @@ parser$add_argument("--source_min_cluster_size",
   help = "For differentiated: minimum #samples a source cluster must have to be picked [default %(default)s]"
 )
 
+parser$add_argument("--source_admix_slack_quantile",
+  action = "store",
+  dest = "source_admix_slack_quantile",
+  type = "double",
+  default = 0.5,
+  help = paste(
+    "For differentiated_unadmixed: candidates whose triangle slack falls below",
+    "this quantile of the candidate slack distribution are treated as admixed",
+    "and dropped. 0 disables the screen. [default %(default)s]"
+  )
+)
+
+parser$add_argument("--source_admix_sep_quantile",
+  action = "store",
+  dest = "source_admix_sep_quantile",
+  type = "double",
+  default = 0.75,
+  help = paste(
+    "For differentiated_unadmixed: only population pairs at least this quantile",
+    "of TVD apart count as the endpoints of the betweenness test [default %(default)s]"
+  )
+)
+
+parser$add_argument("--source_drift_weight",
+  action = "store",
+  dest = "source_drift_weight",
+  type = "double",
+  default = 0.5,
+  help = paste(
+    "For differentiated_unadmixed: exponent on the (normalised) pendant length",
+    "when combined with the mixture residual; 0 = uniqueness only, 1 = strongly",
+    "prefer drifted populations [default %(default)s]"
+  )
+)
+
+parser$add_argument("--source_mds_dim",
+  action = "store",
+  dest = "source_mds_dim",
+  type = "integer",
+  default = 30L,
+  help = "For differentiated_unadmixed: dimensions of the metric embedding used for the mixture residual [default %(default)s]" # nolint
+)
+
+parser$add_argument("--source_allow_admixed_fallback",
+  action = "store_true",
+  dest = "source_allow_admixed_fallback",
+  default = FALSE,
+  help = paste(
+    "For differentiated_unadmixed: if every candidate in a clade fails the",
+    "admixture screen, represent it with the least-bad candidate anyway",
+    "instead of leaving that clade without a source [default %(default)s]"
+  )
+)
+
+parser$add_argument("--source_exclude_pops",
+  action = "store",
+  dest = "source_exclude_pops",
+  default = "unassigned",
+  help = paste(
+    "Comma-separated pop_ids that may never be chosen as sources; they are",
+    "dropped from the TVD before source picking but stay as targets.",
+    "[default %(default)s]"
+  )
+)
+
 args <- parser$parse_args()
 
-if (!(args$source_pick_method %in% c("tree_spread", "farthest", "cluster_medoids", "differentiated", "differentiated_spread"))) {
-  stop("--source_pick_method must be one of: tree_spread, farthest, cluster_medoids, differentiated, differentiated_spread")
+if (!(args$source_pick_method %in% c("tree_spread", "farthest", "cluster_medoids", "differentiated", "differentiated_spread", "differentiated_unadmixed"))) {
+  stop("--source_pick_method must be one of: tree_spread, farthest, cluster_medoids, differentiated, differentiated_spread, differentiated_unadmixed")
 }
-if (args$source_pick_method %in% c("differentiated", "differentiated_spread") && !requireNamespace("ape", quietly = TRUE)) {
-  stop("--source_pick_method differentiated/differentiated_spread requires the 'ape' package")
+if (args$source_pick_method %in% c("differentiated", "differentiated_spread", "differentiated_unadmixed") && !requireNamespace("ape", quietly = TRUE)) {
+  stop("--source_pick_method differentiated/differentiated_spread/differentiated_unadmixed requires the 'ape' package")
+}
+if (args$source_pick_method == "differentiated_unadmixed" && !requireNamespace("lsei", quietly = TRUE)) {
+  stop("--source_pick_method differentiated_unadmixed requires the 'lsei' package (pnnls)")
+}
+if (args$source_admix_slack_quantile < 0 || args$source_admix_slack_quantile > 1) {
+  stop("--source_admix_slack_quantile must be in [0, 1]")
+}
+if (args$source_admix_sep_quantile < 0 || args$source_admix_sep_quantile > 1) {
+  stop("--source_admix_sep_quantile must be in [0, 1]")
+}
+if (args$source_drift_weight < 0) {
+  stop("--source_drift_weight must be >= 0")
 }
 if (args$source_max_per_broad_clade < 1) {
   stop("--source_max_per_broad_clade must be >= 1")
@@ -502,6 +803,27 @@ sample_map <- sample_map |> select(sample_id, pop_id)
 
 ## #samples per (core) population, used by the differentiated picker's size guard
 pop_sizes <- table(sample_map$pop_id)
+
+## Populations that must never be chosen as a source. `unassigned` is not a
+## population: it is the catch-all bin of individuals the tree cut could not
+## place (at h0.5 it held Khoe-San, Cameroonian Neolithic farmers, an Ethiopian
+## 4500BP, a Uruguayan pre-colonial and a Pakistani Iron Age sample), so picking
+## it declares one chimeric source ancestry. Dropped from the TVD before the
+## tree is built, so the differentiated picker's size-guard fallback cannot
+## reinstate it; its samples still appear as targets in the output.
+excl <- trimws(unlist(strsplit(args$source_exclude_pops, ",")))
+excl <- excl[nzchar(excl)]
+if (length(excl) > 0) {
+  hit <- intersect(excl, unique(c(tvd$pop_id1, tvd$pop_id2)))
+  if (length(hit) > 0) {
+    tvd <- tvd |>
+      filter(!(pop_id1 %in% hit), !(pop_id2 %in% hit))
+    cat(sprintf(
+      "__ excluded %d population(s) from source candidacy: %s __\n",
+      length(hit), paste(hit, collapse = ", ")
+    ))
+  }
+}
 
 pops <- sort(unique(c(tvd$pop_id1, tvd$pop_id2)))
 
@@ -584,6 +906,20 @@ if (args$source_pick_method == "cluster_medoids") {
     sizes = pop_sizes,
     min_size = args$source_min_cluster_size,
     relative = args$source_relative_pendant
+  )
+} else if (args$source_pick_method == "differentiated_unadmixed") {
+  med_idx <- pick_differentiated_unadmixed(
+    dist_mat,
+    pops,
+    best_k,
+    sizes = pop_sizes,
+    min_size = args$source_min_cluster_size,
+    relative = args$source_relative_pendant,
+    slack_q = args$source_admix_slack_quantile,
+    sep_q = args$source_admix_sep_quantile,
+    drift_weight = args$source_drift_weight,
+    mds_dim = args$source_mds_dim,
+    allow_fallback = args$source_allow_admixed_fallback
   )
 } else {
   broad_k <- ifelse(args$source_broad_k <= 0, NA_integer_, args$source_broad_k)
