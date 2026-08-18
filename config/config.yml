@@ -51,10 +51,6 @@ masking:
 
 clustering:
   enabled: true
-  # One panel is produced per cut height (adaptive dynamicTreeCut hybrid).
-  heights:
-    - 0.75
-    - 1.0
   clust_method: ward.D2   # hclust agglomeration method
   dist_method: cosine     # distance metric on the IBD feature vectors
   # IBD-vector transforms applied before the distance calculation:
@@ -96,32 +92,35 @@ clustering:
   # sample from turning into a diverse "sink".
   knn: 7
   threads: 32
-  # Optional sharing-gated adaptive cut. Builds ONE labelling from a coarse and
-  # a fine cut of the same tree: a coarse cluster keeps its base label unless
-  # its median per-sample genome-wide IBD clears min_sharing, in which case its
-  # finer subdivision is used. Disabled by default.
+  # base_height / gate_height define the ONE default clustering panel; both are
+  # REQUIRED whenever clustering.enabled is true (the workflow raises an error
+  # at load time otherwise). Equal values -> a plain cut at that height, no
+  # gating. gate_height below base_height -> the sharing-gated combination of
+  # the two: a coarse cluster keeps its base_height label unless its median
+  # per-sample genome-wide IBD clears min_sharing, in which case its finer
+  # gate_height subdivision is used instead.
   #
-  # Rationale: no single height suits a worldwide panel. Cutting deeper resolves
-  # real populations where sharing is dense (Americas, later Europe) but shreds
-  # endogamous African and South Asian populations, which have an order of
-  # magnitude less IBD. Gating holds those regions at the base cut while the
-  # dense regions keep the full fine-cut gain, and roughly halves the unassigned
-  # count versus cutting globally.
+  # There is exactly one resulting panel either way, named cluster_h{base}_
+  # {TAG} (plain) or cluster_h{base}g{gate}_{TAG} (gated) -- not one panel per
+  # height. Set base_height == gate_height for the simple case (a single
+  # ordinary cut, no gate machinery involved).
+  #
+  # Gating rationale: no single height suits a worldwide panel. Cutting deeper
+  # resolves real populations where sharing is dense (Americas, later Europe)
+  # but shreds endogamous African and South Asian populations, which have an
+  # order of magnitude less IBD. Gating holds those regions at the base cut
+  # while the dense regions keep the full fine-cut gain, and roughly halves the
+  # unassigned count versus cutting globally.
   #
   # This is a DATA-SUFFICIENCY gate, not a split-quality test: sharing magnitude
   # separates low-sharing REGIONS from the rest, but does not distinguish good
   # from bad splits WITHIN them, so it also suppresses some genuine splits. See
   # the header of workflow/scripts/r/cluster_cut_gated.R for the benchmark and
-  # the alternatives that scored worse.
-  #
-  # Neither height need appear in `heights` above -- cut_tree builds any height
-  # on demand. Keep fine_height OUT of `heights` unless you want it aggregated:
-  # every entry there also gets its own full aggregation, PCA and mixmodel.
-  gated_cut:
-    enabled: false
-    base_height: 0.5
-    fine_height: 0.2
-    min_sharing: 250000
+  # the alternatives that scored worse. min_sharing is unused when
+  # gate_height == base_height.
+  base_height: 0.75
+  gate_height: 0.75
+  min_sharing: 250000
 
 aggregation:
   max_concurrent_ibd_jobs: 8
@@ -132,10 +131,23 @@ aggregation:
   # plot_mixmodel.R read as cluster_min_dist. Set these to treat such clusters as
   # populations in their own right -- the usual case is a manually curated
   # single-individual cluster split out as an ancestry anchor. Both consumers
-  # read the same keys, so the TVD tree and the plots cannot disagree.
-  tvd_include_recipient_only_pops: false
-  tvd_include_pops: []
-  tvd_exclude_pops: []
+  # (tvd_matrix.py, make_mix_sample_map.py) read the same keys via
+  # full_cluster_pop_flags(panel), so the TVD tree and the plots cannot disagree.
+  #
+  # Scoped PER PANEL -- keyed by panel name (a custom panel's directory name
+  # under config/panels/, or the literal "default" for the raw clustering
+  # panel). A pop_id does not mean the same thing in every panel: in a
+  # manually curated panel "unassigned" can be a deliberate, wholly-recipient
+  # catch-all bin; in the raw default clustering panel the identical pop_id is
+  # just cut_tree's ordinary terminal-cluster label and is typically mostly
+  # donor_recipient -- excluding it there would silently drop a real cluster
+  # from that panel's TVD tree. A panel not listed here gets no override.
+  full_cluster_pop_overrides: {}
+  # example:
+  #   full_cluster_pop_overrides:
+  #     my_custom_panel:
+  #       include_recipient_only_pops: true
+  #       exclude_pops: [unassigned]
   color_map_shapes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
   color_map_embedding: tsne3      # tsne3 | mds3 : 3-D embedding of the TVD matrix
   color_map_mapping: radial       # radial | pca_axes : embedding -> hue mapping

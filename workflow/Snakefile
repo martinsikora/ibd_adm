@@ -33,9 +33,6 @@ MASK_MIN_LOD = MASK_PARAMS.get("min_lod", 0)
 MASK_TRIM = MASK_PARAMS.get("ibd_trim", 0.05)
 MASK_SD = MASK_PARAMS.get("ibd_sd", 5)
 
-CLUSTER_HEIGHTS = [
-    str(h) for h in config.get("clustering", {}).get("heights", [])
-]
 CLUSTER_ENABLED = bool(config.get("clustering", {}).get("enabled", True))
 CLUSTER_THREADS = int(config.get("clustering", {}).get("threads", 24))
 CLUSTER_DIST_METHOD = str(config.get("clustering", {}).get("dist_method", "euclidean"))
@@ -58,7 +55,47 @@ CLUSTER_CL_SIZE = int(config.get("clustering", {}).get("cl_size", 2))
 CLUSTER_DEEP_SPLIT = int(config.get("clustering", {}).get("deep_split", 3))
 CLUSTER_KNN = int(config.get("clustering", {}).get("knn", 1))
 CLUSTER_DEFAULT_PANEL = config.get("clustering", {}).get("default_panel", "default")
-ENABLE_DEFAULT_PIPELINE = CLUSTER_ENABLED and bool(CLUSTER_HEIGHTS)
+
+# ---- base / gate height: there is exactly ONE default clustering panel -----
+# base_height and gate_height must both be set. Equal -> the panel is a plain
+# cut at that height (no gating). gate_height below base_height -> the panel is
+# the sharing-gated combination of the two (workflow/scripts/r/
+# cluster_cut_gated.R): most clusters keep the coarser base_height label, and
+# only those with enough IBD to support it take the finer gate_height label.
+# Neither height needs building elsewhere first: cut_tree carries a {height}
+# wildcard, so both are cut on demand as inputs to the gate.
+ENABLE_DEFAULT_PIPELINE = CLUSTER_ENABLED
+if CLUSTER_ENABLED:
+    _CLU_CFG = config.get("clustering", {})
+    if "base_height" not in _CLU_CFG or "gate_height" not in _CLU_CFG:
+        raise ValueError(
+            "clustering.base_height and clustering.gate_height must both be "
+            "set whenever clustering.enabled is true (equal = no gating, "
+            "gate_height below base_height = gated)"
+        )
+    GATED_BASE_HEIGHT = str(_CLU_CFG["base_height"])
+    GATED_FINE_HEIGHT = str(_CLU_CFG["gate_height"])
+    try:
+        _base_f, _fine_f = float(GATED_BASE_HEIGHT), float(GATED_FINE_HEIGHT)
+    except ValueError:
+        raise ValueError(
+            "clustering.base_height and clustering.gate_height must be "
+            f"numeric (got {GATED_BASE_HEIGHT!r} and {GATED_FINE_HEIGHT!r})"
+        )
+    if _fine_f > _base_f:
+        raise ValueError(
+            "clustering.gate_height must be at or below base_height (a lower "
+            f"cut height is the finer one); got base={GATED_BASE_HEIGHT} "
+            f"gate={GATED_FINE_HEIGHT}"
+        )
+    GATED_ENABLED = _fine_f != _base_f
+    GATED_MIN_SHARING = float(_CLU_CFG.get("min_sharing", 250000))
+    if GATED_ENABLED and GATED_MIN_SHARING < 0:
+        raise ValueError("clustering.min_sharing must be >= 0")
+else:
+    GATED_BASE_HEIGHT = GATED_FINE_HEIGHT = ""
+    GATED_ENABLED = False
+    GATED_MIN_SHARING = 250000.0
 
 def _cluster_name_slug(x):
     return re.sub(r"[^A-Za-z0-9]+", "_", str(x)).strip("_")
@@ -98,49 +135,22 @@ CLUSTER_HIER_RDS = f"{CLUSTER_CACHE_DIR}/{CLUSTER_OUTPUT_TAG}/{PREFIX}.tree_hier
 def cluster_panel_name(height):
     return f"cluster_h{height}_{CLUSTER_OUTPUT_TAG}"
 
+# The single default panel's {height} wildcard value: the composite
+# "{base}g{gate}" string when gated (e.g. "0.5g0.2"), or the bare base height
+# otherwise. cut_tree's {height} wildcard is a plain string match, and
+# cluster_plot.R reads cut_height as character, so this composite value works
+# with every rule that expands over CLUSTER_HEIGHTS exactly like a numeric one
+# -- it is what gated_panel_name() used to build directly, before base/gate
+# height were split out of a general `heights` list.
+CLUSTER_PANEL_HEIGHT = (
+    f"{GATED_BASE_HEIGHT}g{GATED_FINE_HEIGHT}" if GATED_ENABLED else GATED_BASE_HEIGHT
+)
+CLUSTER_HEIGHTS = [CLUSTER_PANEL_HEIGHT] if ENABLE_DEFAULT_PIPELINE else []
 CLUSTER_DEFAULT_PANELS = [cluster_panel_name(h) for h in CLUSTER_HEIGHTS]
 
-# ---- sharing-gated adaptive cut -------------------------------------------
-# Combines a coarse and a fine cut of the same tree, taking the fine labels only
-# where a coarse cluster carries enough IBD to support finer distinctions. See
-# workflow/scripts/r/cluster_cut_gated.R for the rationale and its limits.
-GATED_CFG = config.get("clustering", {}).get("gated_cut", {}) or {}
-GATED_ENABLED = bool(GATED_CFG.get("enabled", False))
-GATED_BASE_HEIGHT = str(GATED_CFG.get("base_height", ""))
-GATED_FINE_HEIGHT = str(GATED_CFG.get("fine_height", ""))
-GATED_MIN_SHARING = float(GATED_CFG.get("min_sharing", 250000))
-
-if GATED_ENABLED:
-    if not ENABLE_DEFAULT_PIPELINE:
-        raise ValueError(
-            "clustering.gated_cut.enabled requires the default clustering "
-            "pipeline (clustering.enabled + at least one height)"
-        )
-    # Neither height has to appear in `heights`: cut_tree carries a {height}
-    # wildcard, so requesting its clusters.tsv builds that cut on demand. Keep
-    # the fine height OUT of `heights` unless you want it aggregated -- every
-    # entry there also gets its own 22-chromosome aggregation, PCA and mixmodel.
-    try:
-        _base_f, _fine_f = float(GATED_BASE_HEIGHT), float(GATED_FINE_HEIGHT)
-    except ValueError:
-        raise ValueError(
-            "clustering.gated_cut base_height and fine_height must be numeric "
-            f"(got {GATED_BASE_HEIGHT!r} and {GATED_FINE_HEIGHT!r})"
-        )
-    if _fine_f >= _base_f:
-        raise ValueError(
-            "clustering.gated_cut.fine_height must be BELOW base_height "
-            "(a lower cut height is the finer one); got "
-            f"base={GATED_BASE_HEIGHT} fine={GATED_FINE_HEIGHT}"
-        )
-    if GATED_MIN_SHARING < 0:
-        raise ValueError("clustering.gated_cut.min_sharing must be >= 0")
-
 def gated_panel_name():
-    # e.g. cluster_h0.5g0.2_dcosine_nscale_mward_D2
-    return (
-        f"cluster_h{GATED_BASE_HEIGHT}g{GATED_FINE_HEIGHT}_{CLUSTER_OUTPUT_TAG}"
-    )
+    # kept for existing call sites (cluster_ibd.smk); now just the one panel
+    return cluster_panel_name(CLUSTER_PANEL_HEIGHT)
 
 CLUSTER_PANELS = {
     "default": {
@@ -156,30 +166,44 @@ CUSTOM_PANELS = config.get("aggregation", {}).get("panels") or []
 # profile over the donor palette is well defined (aggregate_ibd.py restricts
 # only the donor side). These force such clusters back in -- all of them at
 # once, or by name -- with an exclude list for catch-all bins like "unassigned".
+#
+# Scoped PER PANEL, not global: "unassigned" (or any other pop_id) does not
+# mean the same thing in every panel. In a manually curated panel it can be a
+# deliberate, wholly-recipient catch-all bin (e.g. h05_g02_tier3_m's 192-sample
+# "unassigned"); in the raw default clustering panel the identical pop_id is
+# just cut_tree's ordinary terminal-cluster label and is mostly donor_recipient
+# (165 of 198 members here) -- excluding it there would silently drop a real
+# cluster from that panel's TVD tree. A panel not listed in full_cluster_pop_overrides
+# gets no override at all.
 _AGG_CFG = config.get("aggregation", {})
-AGG_TVD_INCLUDE_RECIPIENT_ONLY = bool(
-    _AGG_CFG.get("tvd_include_recipient_only_pops", False)
-)
-AGG_TVD_INCLUDE_POPS = _AGG_CFG.get("tvd_include_pops") or []
-AGG_TVD_EXCLUDE_POPS = _AGG_CFG.get("tvd_exclude_pops") or []
-for _k, _v in (("tvd_include_pops", AGG_TVD_INCLUDE_POPS),
-               ("tvd_exclude_pops", AGG_TVD_EXCLUDE_POPS)):
-    if not isinstance(_v, list) or any("," in str(x) or "'" in str(x) for x in _v):
-        raise ValueError(
-            f"aggregation.{_k} must be a YAML list of pop_ids containing no commas"
-            " or quotes"
-        )
+_FULL_CLUSTER_POP_OVERRIDES = _AGG_CFG.get("full_cluster_pop_overrides") or {}
+if not isinstance(_FULL_CLUSTER_POP_OVERRIDES, dict):
+    raise ValueError("aggregation.full_cluster_pop_overrides must be a mapping of panel name -> options")
+for _panel_key, _panel_cfg in _FULL_CLUSTER_POP_OVERRIDES.items():
+    _panel_cfg = _panel_cfg or {}
+    for _k in ("include_pops", "exclude_pops"):
+        _v = _panel_cfg.get(_k) or []
+        if not isinstance(_v, list) or any("," in str(x) or "'" in str(x) for x in _v):
+            raise ValueError(
+                f"aggregation.full_cluster_pop_overrides.{_panel_key}.{_k} must be a YAML "
+                "list of pop_ids containing no commas or quotes"
+            )
 
 
-def tvd_pop_flags():
-    """Extra tvd_matrix.py flags for forcing non-donor pops into the TVD matrix."""
+def full_cluster_pop_flags(panel):
+    """Extra tvd_matrix.py/make_mix_sample_map.py flags for `panel` (e.g. "default",
+    or a custom panel's directory name). Panels absent from full_cluster_pop_overrides get no
+    flags at all."""
+    cfg = _FULL_CLUSTER_POP_OVERRIDES.get(panel) or {}
+    include_pops = cfg.get("include_pops") or []
+    exclude_pops = cfg.get("exclude_pops") or []
     parts = []
-    if AGG_TVD_INCLUDE_RECIPIENT_ONLY:
+    if cfg.get("include_recipient_only_pops", False):
         parts.append("--include_recipient_only_pops")
-    if AGG_TVD_INCLUDE_POPS:
-        parts.append("--include_pops '" + ",".join(map(str, AGG_TVD_INCLUDE_POPS)) + "'")
-    if AGG_TVD_EXCLUDE_POPS:
-        parts.append("--exclude_pops '" + ",".join(map(str, AGG_TVD_EXCLUDE_POPS)) + "'")
+    if include_pops:
+        parts.append("--include_pops '" + ",".join(map(str, include_pops)) + "'")
+    if exclude_pops:
+        parts.append("--exclude_pops '" + ",".join(map(str, exclude_pops)) + "'")
     return " ".join(parts)
 
 

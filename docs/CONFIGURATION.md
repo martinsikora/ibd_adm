@@ -58,7 +58,6 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 | key | default | type / allowed | controls |
 |-----|---------|----------------|----------|
 | `clustering.enabled` | `true` | bool | Master switch for the default (auto-clustering) pipeline. |
-| `clustering.heights` | `[0.75, 1.0]` | list of numbers | Adaptive tree-cut heights; **one panel per height**. Empty list also disables the default pipeline. |
 | `clustering.clust_method` | `ward.D2` | hclust method | Agglomeration method; part of the output cache tag. |
 | `clustering.dist_method` | `cosine` | distance metric | Distance on the IBD feature vectors; part of the cache tag. |
 | `clustering.normalize_ibd_vectors` | `false` | bool | L2-normalize each sample's row vector before the distance. |
@@ -69,10 +68,9 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 | `clustering.knn` | `7` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
 | `clustering.threads` | `32` | int | Threads for the matrix/distance/clustering rules. |
 | `clustering.default_panel` | `default` (fallback) | string | Name of the default panel whose clusters seed aggregation. |
-| `clustering.gated_cut.enabled` | `false` | bool | Build one labelling from a coarse and a fine cut of the same tree, taking fine labels only where a coarse cluster carries enough IBD to support them. Emits panel `cluster_h{base}g{fine}_{tag}`. |
-| `clustering.gated_cut.base_height` | `0.5` | number | Coarse cut height (the fallback label). |
-| `clustering.gated_cut.fine_height` | `0.2` | number | Fine cut height; must be **below** `base_height`. Neither height need appear in `heights`. |
-| `clustering.gated_cut.min_sharing` | `250000` | cM ≥ 0 | Median per-sample genome-wide IBD a coarse cluster needs before its finer subdivision is used. A data-sufficiency gate, not a split-quality test. |
+| `clustering.base_height` | *(required)* | number | The one default clustering panel's coarse/fallback cut height. Required whenever `clustering.enabled` is true — the workflow raises an error at load time if either this or `gate_height` is unset. |
+| `clustering.gate_height` | *(required)* | number | Fine cut height, at or below `base_height`. **Equal to `base_height`**: no gating, the panel is a plain cut at that height. **Below `base_height`**: the panel is the sharing-gated combination of the two (`cluster_h{base}g{gate}_{tag}`) — a coarse cluster keeps its `base_height` label unless its median per-sample genome-wide IBD clears `min_sharing`, in which case its finer `gate_height` subdivision is used. There is exactly one resulting panel either way, not one per height. |
+| `clustering.min_sharing` | `250000` | cM ≥ 0 | Median per-sample genome-wide IBD a coarse cluster needs before its finer subdivision is used. A data-sufficiency gate, not a split-quality test. Unused when `gate_height == base_height`. |
 
 ## `aggregation`
 
@@ -84,9 +82,7 @@ Stage 4 (`aggregate_ibd.smk`): per-population IBD sharing + TVD + colour map.
 | `aggregation.ibd_params.min_l_cm` | `1` | number | Min segment length (cM) for the masked total-IBD pass (stage 2 `ibd_tot`). |
 | `aggregation.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `aggregation.ibd_params.min_lod` | `3` | number | Min LOD/score. |
-| `aggregation.tvd_include_recipient_only_pops` | `false` | bool | Treat every pop_id with no `donor_recipient` sample as a full cluster: keep it in the TVD matrix (`tvd_matrix.py`) and drop its `_r` suffix in the mixmodel sample_map (`make_mix_sample_map.py`), so it appears under its own name in the TVD tree, PCA and mixture plots. |
-| `aggregation.tvd_include_pops` | `[]` | list of pop_ids | Same treatment, for named pops only. Combines with the flag above. |
-| `aggregation.tvd_exclude_pops` | `[]` | list of pop_ids | Applied after the includes. In the TVD matrix the pops are dropped outright; in the sample_map they are only excluded from the include set (their samples are kept, with `_r`), so a catch-all bin such as `unassigned` never leaves the mixture model. |
+| `aggregation.full_cluster_pop_overrides` | `{}` | mapping: panel name → options | **Scoped per panel** — keyed by a custom panel's directory name under `config/panels/`, or the literal `default` for the raw clustering panel. A panel not listed gets no override at all. Do not set this globally: a pop_id does not mean the same thing in every panel (e.g. `unassigned` can be a deliberate, wholly-recipient catch-all in one manually curated panel and an ordinary, mostly-`donor_recipient` `cut_tree` terminal cluster in another). Each panel's options: `include_recipient_only_pops` (bool, default `false`) treats every pop_id with no `donor_recipient` sample as a full cluster — kept in the TVD matrix (`tvd_matrix.py`) and with its `_r` suffix dropped in the mixmodel sample_map (`make_mix_sample_map.py`), so it appears under its own name in the TVD tree, PCA and mixture plots; `include_pops` (list of pop_ids, default `[]`) applies the same treatment by name; `exclude_pops` (list of pop_ids, default `[]`) is applied after the includes — in the TVD matrix the pops are dropped outright, in the sample_map they are only excluded from the include set (their samples are kept, with `_r`), so a catch-all bin is never silently dropped from the mixture model. |
 | `aggregation.panels` | `[example_panel]` | list of names | Custom panels; each must be a `config/panels/<name>/` directory. Drives custom aggregation, mixture, PCA, and peaks. Omit/empty to use only the default clustering panels. |
 
 ### Colour-map knobs
@@ -206,8 +202,10 @@ peaks. **Disabled by default.**
 
 ## Enable/disable flags and derived tags
 
-- Setting `clustering.enabled: false` (or an empty `heights` list) prunes the
-  entire default panel family; only custom panels are built.
+- Setting `clustering.enabled: false` prunes the entire default panel family;
+  only custom panels are built. When `clustering.enabled` is true,
+  `base_height` and `gate_height` must both be set (equal = no gating) — there
+  is exactly one default panel, never zero and never more than one.
 - `mixture.enabled: false` prunes all mixture outputs; `ibd_window_peaks.enabled:
   false` prunes the peak scan.
 - Clustering intermediates are cached under
@@ -215,7 +213,8 @@ peaks. **Disabled by default.**
   `d<dist_method>_n<transform>_m<clust_method>` (e.g.
   `dcosine_nzscore_mward_D2`). Changing `dist_method`, the feature transforms,
   or `clust_method` writes to a **new** cache directory instead of overwriting,
-  and generated panels are likewise named `cluster_h<height>_<tag>`.
+  and the generated panel is likewise named `cluster_h<base_height>_<tag>`
+  (plain) or `cluster_h<base_height>g<gate_height>_<tag>` (gated).
 
 ### Validated enums / ranges (raise `ValueError` at load)
 
@@ -231,6 +230,7 @@ peaks. **Disabled by default.**
 - `mixture.auto_source_min_tree_dist_quantile` ∈ [0, 1]
 - `mixture.auto_source_max_per_broad_clade` ≥ 1; `..._min_cluster_size` ≥ 1
 - `clustering.standardize_features` and `clustering.scale_features` are mutually exclusive
-- `clustering.gated_cut`: `fine_height` < `base_height`, both numeric, `min_sharing` ≥ 0; requires the default clustering pipeline
+- `clustering.base_height`/`gate_height`: both required whenever `clustering.enabled` is true; both numeric; `gate_height` ≤ `base_height`; `min_sharing` ≥ 0 (checked only when they differ)
+- `aggregation.full_cluster_pop_overrides.<panel>.include_pops`/`exclude_pops`: lists of pop_ids containing no commas or quotes
 - `mixture.diag_sink_strata` ≥ 1; `diag_sink_min_r` ∈ (0, 1]; `diag_sink_min_n` ≥ 3; `diag_sink_min_p` ∈ [0, 1]; `diag_sink_min_gap` ∈ [0, 2]
 - `ibd_window_peaks.norm_mode` ∈ {`none`, `pop_size`}

@@ -155,7 +155,10 @@ if MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:
         output:
             f"{cluster_mix_dir('{height}')}/sample_map.tsv"
         params:
-            pop_flags=tvd_pop_flags(),
+            # "default": see the note above full_cluster_pop_flags() in the Snakefile --
+            # the raw clustering panel is a different pop_id namespace from any
+            # custom panel and must not share its overrides.
+            pop_flags=full_cluster_pop_flags("default"),
         priority:
             70
         shell:
@@ -174,7 +177,7 @@ if MIX_MARKER_FILE and CUSTOM_PANELS:
         output:
             f"{panel_mix_dir('{agg_panel}')}/sample_map.tsv"
         params:
-            pop_flags=tvd_pop_flags(),
+            pop_flags=lambda wc: full_cluster_pop_flags(wc.agg_panel),
         priority:
             70
         shell:

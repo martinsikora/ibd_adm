@@ -25,17 +25,11 @@ if ENABLE_DEFAULT_PIPELINE:
                 f"{PREFIX}.clusters_heatmap.pdf",
             ]
 
-if GATED_ENABLED:
-    # The gated panel dir is cluster_h{base}g{fine}_{TAG}, which plot_clusters'
-    # {height} wildcard matches as "0.5g0.2", so the same rule renders it -- the
-    # dendrogram is just res_hc coloured by cluster_id, which is well defined for
-    # a mixed-depth labelling. cluster_plot.R reads cut_height as character and
-    # matches it tolerantly so the non-numeric tag survives.
-    CLUSTER_OUTPUTS += [
-        f"{gated_clust_dir()}/default.{PREFIX}.clusters.tsv",
-        f"{gated_clust_dir()}/default.{PREFIX}.clusters_hierarchy.pdf",
-        f"{gated_clust_dir()}/default.{PREFIX}.clusters_heatmap.pdf",
-    ]
+# When GATED_ENABLED, CLUSTER_HEIGHTS is already [CLUSTER_PANEL_HEIGHT] = the
+# composite "{base}g{gate}" string (set in the Snakefile), so the loop above
+# already added this panel's clusters.tsv + plots under the gated dir -- no
+# separate append needed. gated_clust_dir()/gated_panel_name() stay defined
+# below for cut_tree_gated's own input/output paths.
 
 
 if ENABLE_DEFAULT_PIPELINE:

@@ -153,7 +153,11 @@ if ENABLE_DEFAULT_PIPELINE:
         output:
             tsv=f"{cluster_agg_dir('{height}')}/tables/{PREFIX}.ibd_pop_tvd.tsv",
         params:
-            pop_flags=tvd_pop_flags(),
+            # scoping key "default": the raw clustering panel, keyed by bare
+            # tree cluster_label, is a different pop_id namespace from any
+            # custom panel -- see the note above full_cluster_pop_flags() in the
+            # Snakefile before adding an override here.
+            pop_flags=full_cluster_pop_flags("default"),
         priority:
             75
         shell:
@@ -218,7 +222,7 @@ if CUSTOM_PANELS_WITH_COLOR:
         output:
             tsv=f"{panel_agg_dir('{panel}')}/tables/{PREFIX}.ibd_pop_tvd.tsv",
         params:
-            pop_flags=tvd_pop_flags(),
+            pop_flags=lambda wc: full_cluster_pop_flags(wc.panel),
         priority:
             75
         shell:
