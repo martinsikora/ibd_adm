@@ -40,6 +40,8 @@ def mix_diag_prefix(mix_dir, mix_panel):
 
 def mixmodel_extra_args(method):
     args = f"--method {method}"
+    if MIX_SEED >= 0:
+        args += f" --seed {MIX_SEED}"
     if method == "bayesian":
         args += (
             f" --mcmc_iter {MIX_MCMC_ITER}"
@@ -235,6 +237,46 @@ if MIX_ENABLED and MIX_MARKER_FILE and CUSTOM_PANELS:
             f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_{{mix_method}}.tsv"
         threads:
             MIX_THREADS
+        ## Memory has to be set here rather than in profiles/slurm because it
+        ## depends on mix_method, and --set-resources expressions are evaluated
+        ## with only {input, attempt, threads} in scope (snakemake/resources.py
+        ## :530) -- a `wildcards` reference there raises NameError, which that
+        ## code SWALLOWS, silently assigning the expression string as the value.
+        ##
+        ## nnls needs more than bayesian, which is counter-intuitive but
+        ## measured: on 2026-08-20 all three nnls fits were killed at 96 GB with
+        ## MaxRSS 96.8-97.9 GB, while the bayesian fit that completed peaked at
+        ## 74.3 GB. The jackknife resamples over 22 leave-one-chromosome-out
+        ## matrices, and those are held alongside the genome-wide ones.
+        ## Floors are set where each method actually lands so the retry ladder
+        ## is insurance, not the mechanism -- climbing from 48 GB cost three
+        ## dead attempts per fit last time.
+        resources:
+            ## 2026-08-22: bayesian 96000 -> 80000. The only true peak we have
+            ## is slurm MaxRSS 74.3 GB, from the fit that completed at 48
+            ## threads; at 16 threads the mid-MCMC footprint is 34-48 GB. It is
+            ## NOT cut further because peak RSS is the IBD read at startup, not
+            ## the MCMC -- that read is single-threaded and loads the same 22
+            ## tables whatever `threads` is, so the peak does not scale with
+            ## thread count and 74.3 GB may well recur at 16 threads. 80000
+            ## clears the known peak by 8%.
+            ##
+            ## nnls stays at 144000 until measured. Its only datapoint is the
+            ## OUT_OF_MEMORY kill at 96 GB (MaxRSS 96.8-97.9), which is a lower
+            ## bound on the peak, not the peak. The three nnls fits run locally
+            ## on 2026-08-21/22 succeeded but local runs have no MaxRSS;
+            ## workflow/scripts/tune/peak_rss.py is sampling world_base_2 nnls
+            ## for a real figure. Do not lower this on the strength of "it
+            ## worked locally" -- the local node has 755 GB and never capped it.
+            mem_mb=lambda wc, attempt: (144000 if wc.mix_method == "nnls" else 80000) * attempt,
+            ## 2026-08-21: 2880 -> 1800. At mixture.threads 16 and mcmc_iter
+            ## 100000 a bayesian fit is ~17.4h (19501 targets x 4 chains x
+            ## 100k iter x 125us measured, / 16 threads), so 48h was a ~2.8x
+            ## over-request. That matters here because fairshare is 0.059 and
+            ## priority ~5.9k against a pending median of 19.3k -- backfill is
+            ## the realistic way in, and it favours short walltime. 30h keeps
+            ## ~70% margin; retries escalate to 60h/90h if that is ever wrong.
+            runtime=lambda wc, attempt: 1800 * attempt,
         priority:
             90
         params:

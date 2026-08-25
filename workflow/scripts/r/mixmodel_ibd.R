@@ -157,7 +157,18 @@ rhat_1d <- function(chain_draws) {
   chain_vars <- apply(chain_draws, 2, var)
   w <- mean(chain_vars)
   if (!is.finite(w) || w <= 0) {
-    return(1)
+    ## 2026-08-21: this branch used to return 1 unconditionally, which reports
+    ## PERFECT convergence for a component that never moved. Harmless when all
+    ## chains sit at the same constant (genuinely converged), but it also
+    ## laundered the opposite case -- every chain frozen at a DIFFERENT value,
+    ## which is maximal non-convergence -- into a clean bill of health.
+    ## Zero within-chain variance with non-zero between-chain variance is
+    ## R-hat = Inf, so say so and let rhat_max carry it.
+    b0 <- var(chain_means)
+    if (!is.finite(b0) || b0 <= 0) {
+      return(1)
+    }
+    return(Inf)
   }
   b <- n * var(chain_means)
   var_hat <- ((n - 1) / n) * w + (1 / n) * b
@@ -698,6 +709,32 @@ parser$add_argument("--method",
   help = "Inference method: nnls or bayesian [default %(default)s]"
 )
 
+parser$add_argument("--seed",
+  action = "store",
+  dest = "seed",
+  type = "integer",
+  default = -1L,
+  help = paste(
+    "RNG seed. Negative means unseeded (the historical behaviour).",
+    "Without a seed, furrr_options(seed = TRUE) derives its per-worker",
+    "L'Ecuyer streams from ambient RNG state, so no run is reproducible --",
+    "two runs of the same config agreed on only 9 of 14 selected sources",
+    "in the hybrid slot search. [default %(default)s]"
+  )
+)
+
+parser$add_argument("--read_prefilter_frac",
+  action = "store",
+  type = "double",
+  default = 0.5,
+  help = paste(
+    "Row-prefilter the IBD tables to the samples this panel actually uses",
+    "(targets + sources) when they are at most this FRACTION of the panel.",
+    "0 disables. Only rows whose sample1 is a target or a source are ever",
+    "read downstream, so the filter is lossless. [default %(default)s]"
+  )
+)
+
 args <- parser$parse_args()
 
 if (!(args$method %in% c("nnls", "bayesian"))) {
@@ -719,21 +756,86 @@ if (args$method == "bayesian" && (!(args$hybrid_active_search %in% c(0, 1)) || a
   stop("For Bayesian mode: require hybrid_active_search in {0,1}, max_active_sources >= 0, active_search_slots >= 2, active_search_iter >= 10, active_search_burnin >= 0, active_search_thin >= 1, and 0 <= active_search_jump_prob <= 1")
 }
 
-plan(multisession, workers = as.integer(args$threads))
-on.exit(plan(sequential), add = TRUE)
-
 
 ## --------------------------------------------------
 ## read input data
 
-cat("__ reading IBD data __\n")
-ibd_pop <- map_dfr(args$files, ~ {
-  r <- read_tsv(.x,
-    col_types = "ccccdi",
-    show_col_types = FALSE
-  )
-  r
-})
+## 2026-08-25: the IBD read was `map_dfr(files, read_tsv)` -- sequential over
+## 4.4 GB of gzipped TSV (~330M rows), and the dominant cost of any fit with
+## few targets (it was >11 min of a ~15 min americas_deep run). Two changes,
+## applied ONLY when the panel is narrow enough to benefit:
+##
+##   1. Row prefilter. ibd_pop is consumed solely via
+##      `filter(sample1 %in% target_samples)` / `%in% source_samples`, and
+##      all_pops plus the matrix row space come from sample_map, not from
+##      ibd_pop -- so dropping rows for excluded samples is LOSSLESS. For a
+##      tune panel that is 301 of 19673 samples; for americas_deep, 1094.
+##   2. Parallel read across the 22 files, which only pays once (1) has cut
+##      what the workers hand back: multisession must serialize the result to
+##      the parent, and unfiltered that transfer eats the entire gain
+##      (1.6x for 1.75 GB returned, vs 3.3x for 90 MB).
+##
+## Benchmarked on chr19-22 (576 MB, 43.7M rows, warm cache, 8 workers):
+##     readr map_dfr, no prefilter        79.9 s   <- previous behaviour
+##     readr + prefilter, sequential      28.9 s
+##     readr + prefilter, parallel         9.4 s
+##     fread + prefilter, parallel         9.9 s
+##
+## readr is KEPT rather than swapped for data.table::fread, deliberately.
+## fread is no faster here (9.9 vs 9.4 s -- once the prefilter has removed 95%
+## of rows the cost is decompression and IO, not parsing) and it is not
+## bit-reproducible: fread and readr disagree by 1 ULP on 4.3% of `ibd` values
+## (max relative difference 2.2e-16). That is numerically irrelevant but the
+## MCMC is chaotic, so it re-draws the whole trajectory -- a measured
+## world_61_tune refit came out statistically equivalent yet different
+## (rhat_max<1.1 47.7% -> 51.1%, median TVD 0.0057, max 0.0433). Given the
+## 2026-08-21 decision to seed for reproducibility, a free parser change that
+## silently invalidates every existing table is not worth 0.5 s.
+## With readr the prefiltered read is bit-identical to the unfiltered one
+## (verified), so seeded runs reproduce exactly.
+##
+## Wide panels (world_61 uses all 19673 samples) take the unchanged sequential
+## path: there the read is ~2% of a 7-10 h fit, so it is not worth the memory
+## risk of holding 22 parallel chunks.
+##
+## Metadata is read BEFORE the IBD tables (needed to build the keep set), which
+## also puts the whole read ahead of set.seed() so it can never perturb the
+## seeded RNG state the model depends on.
+
+read_ibd <- function(files, keep_ids, n_panel, threads, prefilter_frac) {
+  frac <- if (is.null(keep_ids) || is.na(n_panel) || n_panel <= 0) {
+    1
+  } else {
+    length(keep_ids) / n_panel
+  }
+  if (!(prefilter_frac > 0 && length(keep_ids) > 0 && frac <= prefilter_frac)) {
+    cat(sprintf(
+      "__ reading IBD data (sequential; panel uses %.0f%% of samples) __\n",
+      100 * frac
+    ))
+    return(map_dfr(files, ~ read_tsv(.x, col_types = "ccccdi", show_col_types = FALSE)))
+  }
+
+  kf <- tempfile(fileext = ".ids")
+  writeLines(keep_ids, kf)
+  on.exit(unlink(kf), add = TRUE)
+  nw <- max(1L, min(as.integer(threads), length(files)))
+  cat(sprintf(
+    "__ reading IBD data (prefilter to %d/%d samples = %.1f%%, %d workers) __\n",
+    length(keep_ids), n_panel, 100 * frac, nw
+  ))
+  awk <- "NR==FNR{k[$1];next} FNR==1||($2 in k)"
+  cmds <- vapply(files, function(f) sprintf(
+    "zcat %s | awk -F'\t' %s %s -", shQuote(f), shQuote(awk), shQuote(kf)
+  ), character(1), USE.NAMES = FALSE)
+
+  old_plan <- future::plan()
+  future::plan(future::multisession, workers = nw)
+  on.exit(future::plan(old_plan), add = TRUE)
+  dplyr::bind_rows(furrr::future_map(cmds, function(cm) {
+    readr::read_tsv(pipe(cm), col_types = "ccccdi", show_col_types = FALSE)
+  }))
+}
 
 cat("__ reading metadata __\n")
 sample_map <- read_tsv(args$sample_file,
@@ -741,6 +843,32 @@ sample_map <- read_tsv(args$sample_file,
 )
 
 group_map <- read_tsv(args$group_file, show_col_types = FALSE)
+
+## keep set = every sample this panel can use as a target or a source
+.keep_ids <- character(0)
+if (all(c("sample_id", "group") %in% colnames(group_map))) {
+  .keep_ids <- unique(group_map$sample_id[group_map$group %in% c("target", "source")])
+}
+
+ibd_pop <- read_ibd(
+  files = args$files,
+  keep_ids = .keep_ids,
+  n_panel = nrow(sample_map),
+  threads = as.integer(args$threads),
+  prefilter_frac = args$read_prefilter_frac
+)
+
+## Seed before plan(): furrr derives its parallel streams from the RNG state
+## current at the future_map_dfr call, so seeding here makes both the hybrid
+## source search and the MCMC reproducible across runs.
+if (!is.null(args$seed) && !is.na(args$seed) && args$seed >= 0) {
+  set.seed(as.integer(args$seed), kind = "L'Ecuyer-CMRG")
+  cat(sprintf("__ seeded with %d __\n", as.integer(args$seed)))
+}
+
+plan(multisession, workers = as.integer(args$threads))
+on.exit(plan(sequential), add = TRUE)
+
 
 individuals <- read_tsv(args$individuals_file,
   show_col_types = FALSE
