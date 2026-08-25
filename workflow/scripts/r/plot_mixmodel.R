@@ -66,6 +66,13 @@ parser$add_argument("--source_grid",
 
 args <- parser$parse_args()
 
+## Bars are drawn with a hairline stroke: at linewidth 0.25 the outline is wider
+## than a bar in a panel this size, so it covers most of the band and the plot
+## reads far darker than the palette actually is. Error bars and the 0/1 rules
+## keep 0.25.
+BAR_LW <- 0.05
+
+
 
 ## --------------------------------------------------
 ## read input data
@@ -210,7 +217,7 @@ if (args$source_grid) {
         color = source_pop,
         fill = source_pop
       ),
-      linewidth = 0.25
+      linewidth = BAR_LW
     ) +
     geom_errorbar(
       aes(
@@ -226,7 +233,7 @@ if (args$source_grid) {
         color = source_pop,
         fill = source_pop
       ),
-      linewidth = 0.25,
+      linewidth = BAR_LW,
       data = d_s1
     ) +
     geom_text(
@@ -295,7 +302,7 @@ if (args$source_grid) {
         color = source_pop,
         fill = source_pop
       ),
-      linewidth = 0.25
+      linewidth = BAR_LW
     ) +
     geom_errorbar(
       aes(
