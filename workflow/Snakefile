@@ -338,6 +338,9 @@ if not set(MIX_METHODS).issubset(_allowed_mix_methods):
     )
 
 MIX_THREADS = int(config.get("mixture", {}).get("threads", 12))
+## Negative means unseeded. Applies to BOTH methods: the hybrid slot search
+## and the jackknife resampling are stochastic in nnls mode too.
+MIX_SEED = int(config.get("mixture", {}).get("seed", -1))
 MIX_MCMC_ITER = config.get("mixture", {}).get("mcmc_iter", 200000)
 MIX_BURNIN = config.get("mixture", {}).get("burnin", 20000)
 MIX_THIN = config.get("mixture", {}).get("thin", 5)
@@ -438,6 +441,7 @@ if _peak_custom_panels_cfg is None:
     PEAK_CUSTOM_PANELS = CUSTOM_PANELS
 else:
     PEAK_CUSTOM_PANELS = [p for p in _peak_custom_panels_cfg if p in CUSTOM_PANELS]
+PEAK_DEFAULT_PANELS = bool(PEAK_CFG.get("default_panels", True))
 PEAK_IBD_MIN_L = float(PEAK_CFG.get("min_l_cm", config.get("aggregation", {}).get("ibd_params", {}).get("min_l_cm", 0)))
 PEAK_IBD_MIN_LOD = float(PEAK_CFG.get("min_lod", config.get("aggregation", {}).get("ibd_params", {}).get("min_lod", 0)))
 if PEAK_NORM_MODE not in ("none", "pop_size"):
@@ -461,3 +465,16 @@ rule all:
         + MIXMODEL_OUTPUTS
         + PCA_OUTPUTS
         + PEAK_OUTPUTS
+
+
+## the core pipeline addressed on its own, in particular for `snakemake --touch
+## core` after an input was regenerated with identical content and only its
+## timestamp changed (see workflow/scripts/touch_core_slurm.sh).
+rule core:
+    input:
+        MASK_OUTPUTS
+        + IBD_TOT_OUTPUTS
+        + CLUSTER_OUTPUTS
+        + AGG_OUTPUTS
+        + MIXMODEL_OUTPUTS
+        + PCA_OUTPUTS
