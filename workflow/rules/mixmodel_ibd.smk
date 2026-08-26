@@ -146,6 +146,18 @@ if MIX_ENABLED and MIX_MARKER_FILE:
                     MIXMODEL_DIAG.append(
                         f"{panel_mix_dir(_panel)}/{_mix}/diagnostics/{PREFIX}.residual_diagnostic.{_s}.tsv"
                     )
+        # source-level R scale flag: derived from the same profiles, no IBD pass
+        if ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
+            MIXMODEL_DIAG += expand(
+                f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.source_R_flags.tsv",
+                height=CLUSTER_HEIGHTS,
+                mix_panel=DEFAULT_MIX_PANELS,
+            )
+        for _panel, _sets in CUSTOM_MIX_PANELS.items():
+            for _mix in _sets:
+                MIXMODEL_DIAG.append(
+                    f"{panel_mix_dir(_panel)}/{_mix}/diagnostics/{PREFIX}.source_R_flags.tsv"
+                )
 
     MIXMODEL_OUTPUTS = MIX_SAMPLE_MAPS + MIXMODEL_TABLES + MIXMODEL_PLOTS + MIXMODEL_DIAG
 
@@ -477,6 +489,7 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
             src=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/src_prof.tsv",
             val=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/val_prof.tsv",
             valids=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/val.ids",
+            srcn=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/src_n.tsv",
         priority:
             55
         shell:
@@ -487,7 +500,34 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
             awk -F'\\t' 'NR>1 && $2=="target"{{print $1}}' {input.group_file} | head -3 > {output.valids}
             zcat {input.ibd_files} | gawk -v SRCF="$d/src.ids" -v VALF={output.valids} \
               -v POPF={output.palette} -v SRCPF={output.src} -v VALPF={output.val} \
+              -v SRCNF={output.srcn} \
               -f workflow/scripts/awk/ibd_residual_profiles.awk
+            """
+
+    rule mixmodel_source_r_flags_custom:
+        # Source-level R QC flag. Reads only the profiles written by
+        # mixmodel_residual_profiles_custom, so it costs no IBD pass and cannot
+        # affect any fit. See workflow/scripts/awk/mixmodel_source_r_flags.awk for
+        # what a tier does and does not mean.
+        wildcard_constraints:
+            agg_panel="|".join(CUSTOM_PANELS),
+            mix_panel="|".join(CUSTOM_MIX_ALL) if CUSTOM_MIX_ALL else ".*",
+        input:
+            src=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/src_prof.tsv",
+            srcn=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/src_n.tsv",
+        output:
+            flags=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.source_R_flags.tsv",
+        params:
+            panel=lambda wc: f"{wc.agg_panel}/{wc.mix_panel}",
+            warn=MIX_R_FLAG_WARN,
+            severe=MIX_R_FLAG_SEVERE,
+        priority:
+            55
+        shell:
+            """
+            gawk -v NF_FILE={input.srcn} -v PANEL={params.panel} \
+              -v WARN={params.warn} -v SEVERE={params.severe} \
+              -f workflow/scripts/awk/mixmodel_source_r_flags.awk {input.src} > {output.flags}
             """
 
     rule mixmodel_residual_diagnostic_custom:
@@ -541,6 +581,7 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             src=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/src_prof.tsv",
             val=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/val_prof.tsv",
             valids=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/val.ids",
+            srcn=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/src_n.tsv",
         priority:
             55
         shell:
@@ -551,7 +592,30 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             awk -F'\\t' 'NR>1 && $2=="target"{{print $1}}' {input.group_file} | head -3 > {output.valids}
             zcat {input.ibd_files} | gawk -v SRCF="$d/src.ids" -v VALF={output.valids} \
               -v POPF={output.palette} -v SRCPF={output.src} -v VALPF={output.val} \
+              -v SRCNF={output.srcn} \
               -f workflow/scripts/awk/ibd_residual_profiles.awk
+            """
+
+    rule mixmodel_source_r_flags_default:
+        # Default-panel twin of mixmodel_source_r_flags_custom.
+        wildcard_constraints:
+            mix_panel="|".join(DEFAULT_MIX_PANELS),
+        input:
+            src=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/src_prof.tsv",
+            srcn=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/src_n.tsv",
+        output:
+            flags=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.source_R_flags.tsv",
+        params:
+            panel=lambda wc: f"h{wc.height}/{wc.mix_panel}",
+            warn=MIX_R_FLAG_WARN,
+            severe=MIX_R_FLAG_SEVERE,
+        priority:
+            55
+        shell:
+            """
+            gawk -v NF_FILE={input.srcn} -v PANEL={params.panel} \
+              -v WARN={params.warn} -v SEVERE={params.severe} \
+              -f workflow/scripts/awk/mixmodel_source_r_flags.awk {input.src} > {output.flags}
             """
 
     rule mixmodel_residual_diagnostic_default:

@@ -303,6 +303,18 @@ if MIX_DIAG_DISTAL_QUANTILE < 0 or MIX_DIAG_DISTAL_QUANTILE > 1:
 # than an ancestry component, absorbing misfit/drift inside the one stratum
 # where the panel has no proximate source. Strata are cut from the palette
 # geometry, so no metadata region column is involved.
+# source-level R scale flag thresholds, as fold-change vs the panel median R.
+# 2.5 is where validated cohorts start to show a real offset (Morocco 5.3x is
+# confirmed offset; the Steppe/WHG/EEF axis at <2.4x is confirmed clean); 10
+# separates those from the African sources at 20-500x. Panel-relative by
+# construction -- see workflow/scripts/awk/mixmodel_source_r_flags.awk.
+MIX_R_FLAG_WARN = float(config.get("mixture", {}).get("r_flag_warn", 2.5))
+MIX_R_FLAG_SEVERE = float(config.get("mixture", {}).get("r_flag_severe", 10.0))
+if MIX_R_FLAG_WARN <= 1:
+    raise ValueError("mixture.r_flag_warn must be > 1")
+if MIX_R_FLAG_SEVERE <= MIX_R_FLAG_WARN:
+    raise ValueError("mixture.r_flag_severe must be > mixture.r_flag_warn")
+
 MIX_DIAG_SINK_STRATA = int(config.get("mixture", {}).get("diag_sink_strata", 12))
 MIX_DIAG_SINK_MIN_R = float(config.get("mixture", {}).get("diag_sink_min_r", 0.4))
 MIX_DIAG_SINK_MIN_N = int(config.get("mixture", {}).get("diag_sink_min_n", 15))
