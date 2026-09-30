@@ -274,7 +274,7 @@ names the unused population they are standing in for. It runs whenever `bayesian
 is enabled; `source_flags.tsv` additionally needs `nnls`, because it reports the
 disagreement between the two estimators.
 
-Each fit reports `res_norm_ex_self` (the residual excluding the target's own cluster), which is the statistic to compare across targets. Sources are also screened for an R scale offset (`source_R_flags.tsv`), with a per-target risk tier (`target_R_flags.tsv`). NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`). The output columns are described in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables).
+Each fit reports `res_norm_ex_self` (the residual excluding the target's own cluster), which is the statistic to compare across targets. Sources are also screened for an R scale offset (`source_R_flags.tsv`), with a per-target risk tier (`target_R_flags.tsv`). NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`). The output columns are described in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables), and how to interpret every diagnostic is in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every knob.
 

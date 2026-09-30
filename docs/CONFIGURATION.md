@@ -6,6 +6,8 @@ Values are validated at load time: an out-of-range enum or range raises a
 `ValueError` before any job runs. The default column is the code fallback used
 when a key is omitted; the shipped `config/config.yml` overrides several of them.
 
+For how to interpret the output columns and diagnostics, see [`DIAGNOSTICS.md`](DIAGNOSTICS.md).
+
 Contents: [Top level](#top-level) · [`ref`](#ref) · [`input_data`](#input_data) ·
 [`masking`](#masking) · [`clustering`](#clustering) ·
 [`aggregation`](#aggregation) · [colour-map knobs](#colour-map-knobs) ·
