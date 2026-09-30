@@ -170,10 +170,12 @@ rows <- lapply(targets, function(cl) {
   lc <- leftover - mean(leftover); lss <- sqrt(sum(lc^2)); if (lss == 0) lss <- 1
   scores <- as.vector(crossprod(Pu_c, lc)) / (Pu_ss * lss)
   scores[unused == cl] <- NA                       # ignore self
-  j <- which.max(scores)
+  ## no candidate when every other palette population is a source (small panels)
+  j <- if (all(is.na(scores))) NA_integer_ else which.max(scores)
   data.frame(pop_id = cl, res_norm = rn,
              top_source = src_pops[which.max(p)], top_p = max(p),
-             miss_pop = unused[j], miss_score = scores[j],
+             miss_pop = if (is.na(j)) NA_character_ else unused[j],
+             miss_score = if (is.na(j)) NA_real_ else scores[j],
              stringsAsFactors = FALSE)
 })
 cl_res <- bind_rows(rows)
