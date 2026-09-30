@@ -82,6 +82,37 @@ normalize_matrix_cols <- function(m) {
   out
 }
 
+## Fit quality on the EXTERNAL donor palette.
+##
+## all_pops includes the target populations themselves, so a target's palette carries
+## a column of IBD with its own cluster. When that cluster is not also a source, no
+## mixture of sources can predict it, and the miss enters res_norm as a fixed penalty
+## scaling with cohort size and endogamy rather than with ancestry fit. Observed case:
+## Guam/Saipan_Latte on the h05 tier3 panel, 111 co-members and a self share of 0.33,
+## where 98.8% of the MSE is that one column -- res_norm 0.0081, or 0.0009 once it is
+## dropped, i.e. from the worst target in the panel to better than any Remote Oceanian.
+##
+## Both vectors are renormalized over the retained donors, so this compares palette
+## SHAPE outside the own cluster. Dropping the row without renormalizing leaves y
+## deflated by (1 - self_share) while pred is not; the two variants agree to
+## spearman 0.995 panel-wide and diverge only where self_share is large.
+##
+## Always an RMSE, for both estimators. Note that the existing res_norm is NOT
+## comparable between them: bayesian res_norm is an RMSE (infer_sourcefind), while
+## the NNLS one is pnnls()'s rnorm, a plain L2 norm, larger by sqrt(length(y)).
+res_norm_ex_self <- function(y, pred, self_row) {
+  if (length(self_row) != 1L || is.na(self_row)) {
+    return(NA_real_)
+  }
+  keep <- seq_along(y) != self_row
+  sy <- sum(y[keep])
+  sp <- sum(pred[keep])
+  if (sy <= 0 || sp <= 0) {
+    return(NA_real_)
+  }
+  sqrt(mean((pred[keep] / sp - y[keep] / sy)^2))
+}
+
 align_matrix_cols <- function(m, cols) {
   m <- as.matrix(m)
   out <- matrix(0,
@@ -960,6 +991,21 @@ if (length(source_samples) == 0) {
   stop("No source samples found in group_file")
 }
 
+## Row of each target's own cluster in the donor palette, for res_norm_ex_self().
+## Both estimators build their palettes with rownames = all_pops (see
+## get_sum_matrix), so one lookup serves both branches. The "_r" suffix is a
+## labeling device only, as for source_pops above.
+self_cl <- sample_info |>
+  filter(sample_id %in% target_samples) |>
+  mutate(cl = sub("_r$", "", pop_id)) |>
+  distinct(sample_id, cl)
+target_self_row <- setNames(match(self_cl$cl, all_pops), self_cl$sample_id)
+## whether that cluster is itself a source: if so the model CAN fit the self
+## column, and res_norm_ex_self means "fit away from home" rather than "fit on
+## the part no source can reach" -- a different claim, so it is flagged, not
+## silently folded in
+target_self_src <- setNames(self_cl$cl %in% source_pops, self_cl$sample_id)
+
 ## target sharing matrix (populations x target samples)
 ibd_pop_target <- ibd_pop |>
   filter(sample1 %in% target_samples) |>
@@ -1002,6 +1048,19 @@ if (args$method == "bayesian") {
       p = fit$p,
       se = fit$se,
       res_norm = fit$res_norm,
+      ## same quantity as res_norm here; carried so that res_norm_rmse means one
+      ## thing across both estimators (see res_norm_ex_self header)
+      res_norm_rmse = fit$res_norm,
+      res_norm_ex_self = res_norm_ex_self(
+        ibd_pop_target[, x],
+        as.vector(ibd_pop_source %*% fit$p),
+        target_self_row[[x]]
+      ),
+      self_share = ifelse(is.na(target_self_row[[x]]),
+        NA_real_,
+        ibd_pop_target[target_self_row[[x]], x]
+      ),
+      self_is_source = target_self_src[[x]],
       accept_rate = fit$accept_rate,
       accept_rate_min = fit$accept_rate_min,
       accept_rate_max = fit$accept_rate_max,
@@ -1053,6 +1112,19 @@ if (args$method == "bayesian") {
         source_pop = colnames(ibd_pop_source),
         p = r$x,
         res_norm = r$rnorm,
+        ## pnnls returns an L2 norm, sqrt(length(y)) larger than the bayesian
+        ## res_norm; this is the same figure on the bayesian scale
+        res_norm_rmse = r$rnorm / sqrt(nrow(ibd_pop_target)),
+        res_norm_ex_self = res_norm_ex_self(
+          ibd_pop_target[, x],
+          as.vector(ibd_pop_source %*% r$x),
+          target_self_row[[x]]
+        ),
+        self_share = ifelse(is.na(target_self_row[[x]]),
+          NA_real_,
+          ibd_pop_target[target_self_row[[x]], x]
+        ),
+        self_is_source = target_self_src[[x]],
         chrom = "0",
         accept_rate = NA_real_,
         accept_rate_min = NA_real_,
@@ -1084,6 +1156,12 @@ if (args$method == "bayesian") {
         source_pop = colnames(ibd_pop_source_i),
         p = r$x,
         res_norm = r$rnorm,
+        res_norm_rmse = NA_real_,
+        ## leave-one-chromosome fits feed the jackknife SE only; the reported
+        ## residuals are all taken from chrom "0" below
+        res_norm_ex_self = NA_real_,
+        self_share = NA_real_,
+        self_is_source = NA,
         chrom = as.character(i),
         accept_rate = NA_real_,
         accept_rate_min = NA_real_,
@@ -1115,6 +1193,10 @@ if (args$method == "bayesian") {
       ),
       p = p[chrom == "0"],
       res_norm = res_norm[chrom == "0"],
+      res_norm_rmse = res_norm_rmse[chrom == "0"],
+      res_norm_ex_self = res_norm_ex_self[chrom == "0"],
+      self_share = self_share[chrom == "0"],
+      self_is_source = self_is_source[chrom == "0"],
       accept_rate = accept_rate[chrom == "0"],
       accept_rate_min = accept_rate_min[chrom == "0"],
       accept_rate_max = accept_rate_max[chrom == "0"],
@@ -1139,7 +1221,7 @@ p_full <- p_full |>
     by = c("sample_id" = "sample_id")
   ) |>
   mutate(group = "target") |>
-  select(sample_id, label, pop_id, group, source_pop, p, se, res_norm, accept_rate, accept_rate_min, accept_rate_max, ess_min, ess_median, rhat_max, rhat_median, active_sources_median, selected_sources_n, n_keep, n_chains, proposal_scale_final)
+  select(sample_id, label, pop_id, group, source_pop, p, se, res_norm, res_norm_rmse, res_norm_ex_self, self_share, self_is_source, accept_rate, accept_rate_min, accept_rate_max, ess_min, ess_median, rhat_max, rhat_median, active_sources_median, selected_sources_n, n_keep, n_chains, proposal_scale_final)
 
 p_source <- group_map |>
   filter(
@@ -1155,6 +1237,10 @@ p_source <- group_map |>
     p = 1,
     se = 0,
     res_norm = 0,
+    res_norm_rmse = 0,
+    res_norm_ex_self = 0,
+    self_share = NA_real_,
+    self_is_source = NA,
     accept_rate = NA_real_,
     accept_rate_min = NA_real_,
     accept_rate_max = NA_real_,
