@@ -264,13 +264,15 @@ mixture over **source**-population profiles. Two estimators are available
   per-chromosome block-jackknife standard errors.
 - **`bayesian`** — a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
   proposal scaling, and an active-source search (spike-and-slab over the source
-  palette); reports acceptance rate, ESS, and R-hat.
+  palette); reports acceptance rate, ESS, and R-hat (judge convergence on `rhat_median`; `rhat_max` inflates for near-zero sources).
 
 Source populations can be listed explicitly (a `mixture_<set>.tsv` with
 `group == source`) or auto-selected from the TVD / neighbour-joining tree
 (`mixture_auto`), controlled by the `mixture.auto_source_*` knobs. A post-hoc
 **residual diagnostic** (when both estimators run) flags source populations that
 behave as poor proxies and names the unused population they are standing in for.
+
+Each fit reports `res_norm_ex_self` (the residual excluding the target's own cluster), which is the statistic to compare across targets. Sources are also screened for an R scale offset (`source_R_flags.tsv`), and NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`). The output columns are described in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables).
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every knob.
 
