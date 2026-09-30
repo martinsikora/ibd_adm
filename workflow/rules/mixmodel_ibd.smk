@@ -26,12 +26,13 @@ def mixmodel_tag(method):
     return f"mixmodel_{method}"
 
 
-# residual diagnostic needs both estimators (nnls loadings + bayesian loadings
-# for the discordance flag); only wired when both are produced
+# Residual diagnostic. cluster_residuals and source_sink_by_stratum use the Bayesian
+# fit only, so they are wired whenever bayesian is run. source_flags also reports the
+# NNLS/Bayesian discordance, so it is wired only when both estimators are produced.
 MIX_DIAG_ENABLED = (
-    MIX_ENABLED and bool(MIX_MARKER_FILE)
-    and {"nnls", "bayesian"}.issubset(set(MIX_METHODS))
+    MIX_ENABLED and bool(MIX_MARKER_FILE) and "bayesian" in set(MIX_METHODS)
 )
+MIX_DIAG_BOTH = MIX_DIAG_ENABLED and "nnls" in set(MIX_METHODS)
 
 
 def mix_diag_prefix(mix_dir, mix_panel):
@@ -134,7 +135,9 @@ if MIX_ENABLED and MIX_MARKER_FILE:
 
     MIXMODEL_DIAG = []
     if MIX_DIAG_ENABLED:
-        _diag_suffixes = ("source_flags", "cluster_residuals", "source_sink_by_stratum")
+        _diag_suffixes = ("cluster_residuals", "source_sink_by_stratum")
+        if MIX_DIAG_BOTH:
+            _diag_suffixes += ("source_flags",)
         if ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             for _s in _diag_suffixes:
                 MIXMODEL_DIAG += expand(
@@ -542,13 +545,14 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
             val=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/val_prof.tsv",
             valids=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/val.ids",
             sample_file=f"{panel_mix_dir('{agg_panel}')}/sample_map.tsv",
-            nnls=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_nnls.tsv",
             bayesian=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_bayesian.tsv",
+            **({"nnls": f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_nnls.tsv"} if MIX_DIAG_BOTH else {}),
         output:
-            flags=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv",
             resid=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.cluster_residuals.tsv",
             sink=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_sink_by_stratum.tsv",
+            **({"flags": f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv"} if MIX_DIAG_BOTH else {}),
         params:
+            nnls=lambda wc, input: input.get("nnls", "-"),
             prefix=lambda wc: mix_diag_prefix(panel_mix_dir(wc.agg_panel), wc.mix_panel),
             distal_q=MIX_DIAG_DISTAL_QUANTILE,
             sink_strata=MIX_DIAG_SINK_STRATA,
@@ -562,7 +566,7 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
             """
             Rscript workflow/scripts/r/mixmodel_residual_diagnostic.R \
               {input.palette} {input.src} {input.val} {input.sample_file} \
-              {input.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
+              {params.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
               {params.sink_strata} {params.sink_min_r} {params.sink_min_n} \
               {params.sink_min_p} {params.sink_min_gap}
             """
@@ -629,13 +633,14 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             val=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/val_prof.tsv",
             valids=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/val.ids",
             sample_file=f"{cluster_mix_dir('{height}')}/sample_map.tsv",
-            nnls=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_nnls.tsv",
             bayesian=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_bayesian.tsv",
+            **({"nnls": f"{cluster_mix_dir('{height}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_nnls.tsv"} if MIX_DIAG_BOTH else {}),
         output:
-            flags=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv",
             resid=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.cluster_residuals.tsv",
             sink=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_sink_by_stratum.tsv",
+            **({"flags": f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.residual_diagnostic.source_flags.tsv"} if MIX_DIAG_BOTH else {}),
         params:
+            nnls=lambda wc, input: input.get("nnls", "-"),
             prefix=lambda wc: mix_diag_prefix(cluster_mix_dir(wc.height), wc.mix_panel),
             distal_q=MIX_DIAG_DISTAL_QUANTILE,
             sink_strata=MIX_DIAG_SINK_STRATA,
@@ -649,7 +654,7 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             """
             Rscript workflow/scripts/r/mixmodel_residual_diagnostic.R \
               {input.palette} {input.src} {input.val} {input.sample_file} \
-              {input.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
+              {params.nnls} {input.bayesian} {input.valids} {params.prefix} {params.distal_q} \
               {params.sink_strata} {params.sink_min_r} {params.sink_min_n} \
               {params.sink_min_p} {params.sink_min_gap}
             """

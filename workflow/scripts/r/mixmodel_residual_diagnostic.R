@@ -41,17 +41,21 @@ suppressPackageStartupMessages({
 })
 
 ## ---- paths (positional args) ----
+## Without the NNLS table only the Bayesian-based outputs are written (cluster_residuals,
+## source_sink_by_stratum). source_flags.tsv needs both estimators because it reports the
+## NNLS/Bayesian discordance `disc`, which also feeds the absorber flag.
 a <- commandArgs(trailingOnly = TRUE)
 POP  <- a[1]   # pop_prof.tsv : pop_id1, pop_id2, sum   (all samples -> palette P)
 SRCP <- a[2]   # src_prof.tsv : pop_id1, pop_id2, sum   (source samples -> S)
 VALP <- a[3]   # val_prof.tsv : sample1, pop_id2, sum    (validation samples)
 SMAP <- a[4]   # sample_map.tsv (sample_id, pop_id)
-NNLS <- a[5]   # model nnls tsv
+NNLS <- a[5]   # model nnls tsv, or "-" to skip everything that needs it (source_flags.tsv)
 BAYE <- a[6]   # model bayesian tsv
 VALI <- a[7]   # val.ids (validation sample ids)
 OUT  <- a[8]   # output prefix
 ## optional 9th arg: quantile of the source distality distribution above which a
 ## source counts as distal enough for the proxy-abuse flags (default 0.5)
+HAVE_NNLS <- nzchar(NNLS) && NNLS != "-"
 DISTAL_Q <- if (length(a) >= 9 && nzchar(a[9])) as.numeric(a[9]) else 0.5
 if (is.na(DISTAL_Q) || DISTAL_Q < 0 || DISTAL_Q > 1) {
   stop("distal quantile (arg 9) must be in [0, 1]")
@@ -111,14 +115,14 @@ src_pops <- colnames(S)
 ## ---- model outputs -> cluster-mean p (non-_r targets), and per-sample for validation ----
 read_p <- function(f) read_tsv(f, col_types = cols_only(
   sample_id = "c", pop_id = "c", group = "c", source_pop = "c", p = "d", res_norm = "d"))
-mn <- read_p(NNLS); mb <- read_p(BAYE)
+mb <- read_p(BAYE)
+mn <- if (HAVE_NNLS) read_p(NNLS) else NULL
 
 cluster_p <- function(m) m |>
   filter(!grepl("_r$", pop_id)) |>
   group_by(pop_id, source_pop) |> summarise(p = mean(p), .groups = "drop")
-cpn <- cluster_p(mn); cpb <- cluster_p(mb)
-resn_cl <- mn |> filter(!grepl("_r$", pop_id)) |> distinct(sample_id, pop_id, res_norm) |>
-  group_by(pop_id) |> summarise(model_res_norm = mean(res_norm), n = n(), .groups = "drop")
+cpb <- cluster_p(mb)
+cpn <- if (HAVE_NNLS) cluster_p(mn) else NULL
 
 ## wide cluster x source p matrices aligned to src_pops
 to_wide <- function(cp) {
@@ -128,20 +132,23 @@ to_wide <- function(cp) {
   miss <- setdiff(src_pops, colnames(W)); if (length(miss)) W <- cbind(W, matrix(0, nrow(W), length(miss), dimnames = list(NULL, miss)))
   W[, src_pops, drop = FALSE]
 }
-Pn <- to_wide(cpn); Pb <- to_wide(cpb)
+Pb <- to_wide(cpb)
+Pn <- if (HAVE_NNLS) to_wide(cpn) else NULL
 
 ## ================= VALIDATION: recompute res_norm for a few samples =================
 val_ids <- readLines(VALI)
-cat("\n=== VALIDATION: reconstructed vs model res_norm (nnls) ===\n")
-for (s in val_ids) {
-  if (!s %in% colnames(V)) next
-  y <- V[, s]
-  pv <- mn |> filter(sample_id == s, source_pop %in% src_pops)
-  p <- setNames(rep(0, length(src_pops)), src_pops); p[pv$source_pop] <- pv$p
-  pred <- as.vector(S %*% p)
-  rn <- sqrt(mean((pred - y)^2))
-  cat(sprintf("  %-12s recon=%.5f  model=%.5f  (p_sum=%.3f)\n",
-              s, rn, unique(pv$res_norm)[1], sum(p)))
+if (HAVE_NNLS) {
+  cat("\n=== VALIDATION: reconstructed vs model res_norm (nnls) ===\n")
+  for (s in val_ids) {
+    if (!s %in% colnames(V)) next
+    y <- V[, s]
+    pv <- mn |> filter(sample_id == s, source_pop %in% src_pops)
+    p <- setNames(rep(0, length(src_pops)), src_pops); p[pv$source_pop] <- pv$p
+    pred <- as.vector(S %*% p)
+    rn <- sqrt(mean((pred - y)^2))
+    cat(sprintf("  %-12s recon=%.5f  model=%.5f  (p_sum=%.3f)\n",
+                s, rn, unique(pv$res_norm)[1], sum(p)))
+  }
 }
 
 ## ================= CLUSTER RESIDUALS + WHAT'S-MISSING PROJECTION =================
@@ -237,7 +244,7 @@ cat(sprintf(
 ))
 
 disc <- tibble(source_pop = src_pops,
-               disc = sapply(src_pops, function(s) mean(abs(Pn[targets, s] - Pb[targets, s]))))
+               disc = if (HAVE_NNLS) sapply(src_pops, function(s) mean(abs(Pn[targets, s] - Pb[targets, s]))) else NA_real_)
 flag <- lapply(src_pops, function(s) {
   pv <- Pb[targets, s]
   loaded <- targets[pv >= 0.15]
@@ -404,7 +411,7 @@ flag <- flag |>
                           sink ~ "sink", TRUE ~ "")
   ) |>
   arrange(flag_type == "", desc(mean_miss_score))
-write_tsv(flag, paste0(OUT, ".source_flags.tsv"))
+if (HAVE_NNLS) write_tsv(flag, paste0(OUT, ".source_flags.tsv"))
 
 cat(sprintf("\n(global median cluster res_norm = %.5f; poor_fit threshold)\n", global_med_res))
 cat("=== PER-SOURCE PROXY-ABUSE FLAGS (distal sources, flagged first) ===\n")

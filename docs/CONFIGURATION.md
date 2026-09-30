@@ -206,7 +206,13 @@ populations from the TVD / neighbour-joining tree.
 
 ### Residual diagnostic
 
-Post-hoc, no re-fit. Writes `*.cluster_residuals.tsv`, `*.source_flags.tsv` and `*.source_sink_by_stratum.tsv` per mixture panel.
+Post-hoc, no re-fit. Runs for every mixture panel whenever `bayesian` is in `mixture.method`, and writes:
+
+- `*.cluster_residuals.tsv`: per target cluster, the leftover after the Bayesian fit and the unused population it most resembles. Bayesian fit only.
+- `*.source_sink_by_stratum.tsv`: the per-stratum sink test. Bayesian fit only.
+- `*.source_flags.tsv`: per-source flags (`absorber`, `poor_fit`, `sink`). Written only when `nnls` is also in `mixture.method`, because it reports the NNLS/Bayesian discordance `disc`, which feeds the `absorber` flag.
+
+The source R flags (`*.source_R_flags.tsv`) are scheduled under the same condition (`bayesian` enabled) because they share the profile step, although they use no model output.
 
 | key | default | type | meaning |
 |---|---|---|---|
