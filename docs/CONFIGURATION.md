@@ -127,6 +127,10 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.seed` | `-1` | int | RNG seed for both estimators (the hybrid slot search and the NNLS jackknife resampling are stochastic too). Negative = unseeded. |
 | `mixture.r_flag_warn` | `2.5` | number > 1 | Source-level R scale QC. A source whose emitted IBD R differs from the panel median by at least this fold-change is flagged `WARN`. Validated cohorts start to show a real offset at about 2.5 (Morocco at 5.3x is a confirmed offset; the Steppe/WHG/EEF axis below 2.4x is clean). |
 | `mixture.r_flag_severe` | `10.0` | number > `r_flag_warn` | Fold-change at which the flag becomes `SEVERE` (separates those cases from African sources at 20-500x). |
+| `mixture.r_target_pmin` | `0.002` | [0, 1) | Per-target R risk: raw weight below which a flagged source cannot raise a target's tier. Stops a tiny weight divided by a very small R from producing a spurious share. |
+| `mixture.r_target_high` | `0.02` | (0, 1] | R-corrected share on `SEVERE` sources at which a target is `HIGH` risk. |
+| `mixture.r_target_moderate` | `0.05` | (0, 1] | R-corrected share on `WARN` sources at which a target is `MODERATE` risk. |
+| `mixture.r_target_low` | `0.01` | (0, 1] | Total R-corrected share on flagged sources at which a target is `LOW` risk. |
 | `mixture.cv` | `none` | `none` \| `evenodd` \| `loco` \| `k<K>` \| `test:<chroms>` | Chromosome hold-out CV for the NNLS fits: `evenodd` fits even and scores odd chromosomes and the reverse, `loco` holds out each chromosome in turn, `k<K>` uses K marker-balanced blocks, `test:1,3-5` holds out the listed chromosomes. Writes `<out>.cv.tsv`; the main table is unchanged. Not applied to Bayesian fits; run those by hand with `--cv evenodd --cv_only 1`. See "Chromosome hold-out CV" below. |
 | `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts for IBD length weighting. |
 
@@ -146,6 +150,15 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `accept_rate*`, `ess_*`, `active_sources_median` | Bayesian sampler diagnostics (`NA` for NNLS). |
 
 **Source R flags** (`diagnostics/<prefix>.source_R_flags.tsv`) mark sources whose total emitted IBD R is far from the panel median. A low R deflates a source's proportions and a high R inflates them. The flag is relative to the panel, is computed before any fit, and is never a reason to drop a source. It gives the direction of a possible scale offset but not its size; no per-source correction was found that generalises. See `workflow/scripts/awk/mixmodel_source_r_flags.awk`.
+
+**Target R risk** (`diagnostics/<prefix>.target_R_flags.tsv`) shows, for each target, how much of its estimate rests on sources flagged in `source_R_flags.tsv`. It is computed from the Bayesian table and the source flags, with no extra IBD pass. The tier uses the R-corrected share `q = (p / R)`, renormalised over the sources. It uses this share because a source with a low R has a deflated raw `p`, so tiering on `p` would miss the worst cases. Dividing by R over-corrects as an estimator, so `q_flagged` is an upper bound on what the flagged sources could contribute. It is not a corrected proportion.
+
+| column | meaning |
+|---|---|
+| `p_severe`, `p_warn` | Raw weight on `SEVERE` and `WARN` sources. |
+| `q_severe`, `q_warn`, `q_flagged` | The same after the R correction (`q_flagged` is their sum). |
+| `top_flagged_source` | The flagged source with the largest corrected share (`-` if none). |
+| `risk` | `HIGH` if `q_severe >= r_target_high`; else `MODERATE` if `q_warn >= r_target_moderate`; else `LOW` if `q_flagged >= r_target_low`; else `none`. |
 
 ### Chromosome hold-out CV (`mixture.cv`)
 

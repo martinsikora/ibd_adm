@@ -310,6 +310,16 @@ if MIX_DIAG_DISTAL_QUANTILE < 0 or MIX_DIAG_DISTAL_QUANTILE > 1:
 # construction -- see workflow/scripts/awk/mixmodel_source_r_flags.awk.
 MIX_R_FLAG_WARN = float(config.get("mixture", {}).get("r_flag_warn", 2.5))
 MIX_R_FLAG_SEVERE = float(config.get("mixture", {}).get("r_flag_severe", 10.0))
+# per-target risk tiers built on the source R flags, on the R-corrected share
+MIX_R_TARGET_PMIN = float(config.get("mixture", {}).get("r_target_pmin", 0.002))
+MIX_R_TARGET_HIGH = float(config.get("mixture", {}).get("r_target_high", 0.02))
+MIX_R_TARGET_MODERATE = float(config.get("mixture", {}).get("r_target_moderate", 0.05))
+MIX_R_TARGET_LOW = float(config.get("mixture", {}).get("r_target_low", 0.01))
+if not 0 <= MIX_R_TARGET_PMIN < 1:
+    raise ValueError("mixture.r_target_pmin must be in [0, 1)")
+for _k, _v in (("high", MIX_R_TARGET_HIGH), ("moderate", MIX_R_TARGET_MODERATE), ("low", MIX_R_TARGET_LOW)):
+    if not 0 < _v <= 1:
+        raise ValueError(f"mixture.r_target_{_k} must be in (0, 1]")
 if MIX_R_FLAG_WARN <= 1:
     raise ValueError("mixture.r_flag_warn must be > 1")
 if MIX_R_FLAG_SEVERE <= MIX_R_FLAG_WARN:

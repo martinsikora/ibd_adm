@@ -163,6 +163,18 @@ if MIX_ENABLED and MIX_MARKER_FILE:
                 MIXMODEL_DIAG.append(
                     f"{panel_mix_dir(_panel)}/{_mix}/diagnostics/{PREFIX}.source_R_flags.tsv"
                 )
+        # per-target risk tiers from the source flags and the Bayesian table
+        if ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
+            MIXMODEL_DIAG += expand(
+                f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
+                height=CLUSTER_HEIGHTS,
+                mix_panel=DEFAULT_MIX_PANELS,
+            )
+        for _panel, _sets in CUSTOM_MIX_PANELS.items():
+            for _mix in _sets:
+                MIXMODEL_DIAG.append(
+                    f"{panel_mix_dir(_panel)}/{_mix}/diagnostics/{PREFIX}.target_R_flags.tsv"
+                )
 
     MIXMODEL_OUTPUTS = MIX_SAMPLE_MAPS + MIXMODEL_TABLES + MIXMODEL_PLOTS + MIXMODEL_DIAG
 
@@ -535,6 +547,31 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
               -f workflow/scripts/awk/mixmodel_source_r_flags.awk {input.src} > {output.flags}
             """
 
+    rule mixmodel_target_r_flags_custom:
+        # Per-target risk tiers: how much of each target's estimate rests on sources
+        # flagged by mixmodel_source_r_flags_custom. Reads two finished tables, no IBD pass.
+        wildcard_constraints:
+            agg_panel="|".join(CUSTOM_PANELS),
+            mix_panel="|".join(CUSTOM_MIX_ALL) if CUSTOM_MIX_ALL else ".*",
+        input:
+            flags=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.source_R_flags.tsv",
+            bayesian=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_bayesian.tsv",
+        output:
+            risk=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
+        params:
+            pmin=MIX_R_TARGET_PMIN,
+            high=MIX_R_TARGET_HIGH,
+            moderate=MIX_R_TARGET_MODERATE,
+            low=MIX_R_TARGET_LOW,
+        priority:
+            55
+        shell:
+            """
+            gawk -v fQC={input.flags} -v PMIN={params.pmin} -v HIGH={params.high} \
+              -v MODERATE={params.moderate} -v LOW={params.low} \
+              -f workflow/scripts/awk/mixmodel_target_r_flags.awk {input.flags} {input.bayesian} > {output.risk}
+            """
+
     rule mixmodel_residual_diagnostic_custom:
         wildcard_constraints:
             agg_panel="|".join(CUSTOM_PANELS),
@@ -622,6 +659,29 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             gawk -v NF_FILE={input.srcn} -v PANEL={params.panel} \
               -v WARN={params.warn} -v SEVERE={params.severe} \
               -f workflow/scripts/awk/mixmodel_source_r_flags.awk {input.src} > {output.flags}
+            """
+
+    rule mixmodel_target_r_flags_default:
+        # Default-panel twin of mixmodel_target_r_flags_custom.
+        wildcard_constraints:
+            mix_panel="|".join(DEFAULT_MIX_PANELS),
+        input:
+            flags=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.source_R_flags.tsv",
+            bayesian=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/tables/{PREFIX}.mixmodel_bayesian.tsv",
+        output:
+            risk=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
+        params:
+            pmin=MIX_R_TARGET_PMIN,
+            high=MIX_R_TARGET_HIGH,
+            moderate=MIX_R_TARGET_MODERATE,
+            low=MIX_R_TARGET_LOW,
+        priority:
+            55
+        shell:
+            """
+            gawk -v fQC={input.flags} -v PMIN={params.pmin} -v HIGH={params.high} \
+              -v MODERATE={params.moderate} -v LOW={params.low} \
+              -f workflow/scripts/awk/mixmodel_target_r_flags.awk {input.flags} {input.bayesian} > {output.risk}
             """
 
     rule mixmodel_residual_diagnostic_default:
