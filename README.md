@@ -133,7 +133,7 @@ Columns 7–8 are ignored. Both sample ids must appear in `individuals.tsv`.
 - `chromosomes` — the chromosome list (`config/chromosomes.txt`).
 - `marker_file` — per-chromosome marker counts (`config/n_markers.tsv`), used by
   the mixture model to weight IBD by marker density.
-- `fasta` — reserved; read from config but **not currently consumed** by any rule.
+- `fasta` — reserved; read from config but not currently used by any rule.
 
 ### Custom-panel files (`config/panels/<panel>/`)
 
@@ -197,7 +197,7 @@ No conda environment is committed; install the above with your preferred manager
 From the repository root (where `config/` lives):
 
 ```bash
-# 1. Dry run — build the DAG and validate config without executing anything
+# 1. Dry run: build the DAG and validate config without executing anything
 snakemake -n
 
 # 2. Run locally with N cores
@@ -208,8 +208,8 @@ snakemake --cores 8 results/ibd_tot/tables/1.example_dataset.ibd_tot.tsv.gz
 ```
 
 Several rules declare `mem_mb` and `runtime` resources (e.g. the clustering and
-mixture-model steps are memory- and CPU-hungry). These imply a cluster
-executor — supply a Snakemake **profile / SLURM executor** at invocation
+mixture-model steps need a lot of memory and CPU). These imply a cluster
+executor. Supply a Snakemake **profile / SLURM executor** at invocation
 (e.g. `snakemake --workflow-profile <profile>` or `--executor slurm`). No profile
 is committed to this repo; provide one suited to your scheduler.
 
@@ -234,11 +234,11 @@ Two `config.yml` knobs throttle IO-heavy fan-out via Snakemake global resources:
 
 ## Building a custom panel
 
-A custom panel is just the three files under `config/panels/<name>/` described
-above; you can write them by hand. As a convenience,
+A custom panel is the three files under `config/panels/<name>/` described
+above, which you can write by hand. Alternatively,
 [`workflow/scripts/r/build_example_panel.R`](workflow/scripts/r/build_example_panel.R)
-builds `aggregate.tsv` + `color_map.tsv` (in lock-step, so their `pop_id` sets
-stay identical) from two metadata tables:
+builds `aggregate.tsv` and `color_map.tsv` together, so their `pop_id` sets stay
+identical, from two metadata tables:
 
 - `sample_info.tsv` — `sample_id, cluster_label, cluster_alias, cluster_assignment`
 - `cluster_info.tsv` — `cluster_label, cluster_alias, color, fill, shape`
@@ -264,7 +264,7 @@ mixture over **source**-population profiles. Two estimators are available
   per-chromosome block-jackknife standard errors.
 - **`bayesian`** — a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
   proposal scaling, and an active-source search (spike-and-slab over the source
-  palette); reports acceptance rate, ESS, and R-hat (judge convergence on `rhat_median`; `rhat_max` inflates for near-zero sources).
+  palette); reports acceptance rate, ESS, and R-hat. Judge convergence on `rhat_median`; `rhat_max` becomes large for near-zero sources.
 
 Source populations can be listed explicitly (a `mixture_<set>.tsv` with
 `group == source`) or auto-selected from the TVD / neighbour-joining tree
