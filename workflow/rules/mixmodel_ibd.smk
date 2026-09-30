@@ -42,6 +42,8 @@ def mixmodel_extra_args(method):
     args = f"--method {method}"
     if MIX_SEED >= 0:
         args += f" --seed {MIX_SEED}"
+    if method == "nnls" and MIX_CV != "none":
+        args += f" --cv {MIX_CV}"
     if method == "bayesian":
         args += (
             f" --mcmc_iter {MIX_MCMC_ITER}"

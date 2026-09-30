@@ -184,6 +184,9 @@ aggregation:
 mixture:
   enabled: true
   method: both
+  # chromosome hold-out CV for the NNLS fits (writes <out>.cv.tsv; main table unchanged):
+  #   none | evenodd | loco | k<K> | test:<chroms>
+  cv: none
   # future multisession workers per run_models job; models parallelize across
   # target samples (one target/chain is single-threaded)
   threads: 48

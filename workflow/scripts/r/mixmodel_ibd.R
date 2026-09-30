@@ -766,6 +766,32 @@ parser$add_argument("--read_prefilter_frac",
   )
 )
 
+parser$add_argument("--cv",
+  action = "store",
+  dest = "cv",
+  default = "none",
+  help = paste(
+    "Chromosome hold-out evaluation (see mixmodel_cv.R): none, evenodd, loco,",
+    "k<K> (K marker-balanced blocks) or test:<chroms> e.g. test:1,3-5.",
+    "Each fold fits on the train chromosomes and scores on the held-out ones;",
+    "results go to a separate per-target table. [default %(default)s]"
+  )
+)
+
+parser$add_argument("--cv_only",
+  action = "store",
+  dest = "cv_only",
+  type = "integer",
+  default = 0L,
+  help = "Run only the --cv evaluation and skip the genome-wide fit and main table (0/1) [default %(default)s]"
+)
+
+parser$add_argument("--cv_out",
+  action = "store",
+  dest = "cv_out",
+  help = "CV table path [default: --out with .tsv replaced by .cv.tsv]"
+)
+
 args <- parser$parse_args()
 
 if (!(args$method %in% c("nnls", "bayesian"))) {
@@ -785,6 +811,22 @@ if (args$method == "bayesian" && (args$local_move_prob < 0 || args$local_move_pr
 }
 if (args$method == "bayesian" && (!(args$hybrid_active_search %in% c(0, 1)) || args$max_active_sources < 0 || args$active_search_slots < 2 || args$active_search_iter < 10 || args$active_search_burnin < 0 || args$active_search_thin < 1 || args$active_search_jump_prob < 0 || args$active_search_jump_prob > 1)) {
   stop("For Bayesian mode: require hybrid_active_search in {0,1}, max_active_sources >= 0, active_search_slots >= 2, active_search_iter >= 10, active_search_burnin >= 0, active_search_thin >= 1, and 0 <= active_search_jump_prob <= 1")
+}
+
+
+if (!(args$cv_only %in% c(0L, 1L))) {
+  stop("--cv_only must be 0 or 1")
+}
+if (args$cv_only == 1L && args$cv == "none") {
+  stop("--cv_only needs a --cv spec")
+}
+if (args$cv == "loco" && args$method == "bayesian") {
+  stop("--cv loco with the Bayesian estimator would run 22 MCMC refits per target; use evenodd, k<K> or test:<chroms>")
+}
+if (args$cv != "none") {
+  .script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+  .script_dir <- if (length(.script_arg)) dirname(normalizePath(sub("^--file=", "", .script_arg[1]))) else "."
+  source(file.path(.script_dir, "mixmodel_cv.R"))
 }
 
 
@@ -929,6 +971,13 @@ if (!"sample_id" %in% colnames(individuals)) {
 if (!all(c("chrom", "n") %in% colnames(n_markers))) {
   stop("length_file must contain columns: chrom, n")
 }
+if (args$cv != "none") {
+  # fail fast: a bad --cv spec must not surface only after the fit has finished
+  cv_check_folds_present(
+    cv_make_folds(args$cv, as.character(n_markers$chrom), n_markers$n),
+    unique(ibd_pop$chrom)
+  )
+}
 if (!"label" %in% colnames(individuals)) {
   individuals <- individuals |>
     mutate(label = sample_id)
@@ -1005,6 +1054,126 @@ target_self_row <- setNames(match(self_cl$cl, all_pops), self_cl$sample_id)
 ## the part no source can reach" -- a different claim, so it is flagged, not
 ## silently folded in
 target_self_src <- setNames(self_cl$cl %in% source_pops, self_cl$sample_id)
+
+## --------------------------------------------------
+## chromosome hold-out evaluation (--cv); folds, scoring and the per-fold driver
+## live in mixmodel_cv.R. Everything here is inert unless --cv is set, and it runs
+## after the main table is written (or instead of it with --cv_only), so it cannot
+## change the genome-wide fit.
+
+## top level on purpose: see cv_run_fold on why fit functions must not be closures
+## over large frames
+cv_bayes_fit <- function(y, S) {
+  infer_sourcefind(
+    y = y,
+    source_mat = S,
+    n_iter = args$mcmc_iter,
+    burnin = args$burnin,
+    thin = args$thin,
+    proposal_scale = args$proposal_scale,
+    n_chains = args$mcmc_chains,
+    adapt_burnin_frac = args$adapt_burnin_frac,
+    adapt_interval = args$adapt_interval,
+    adapt_target_accept = args$adapt_target_accept,
+    local_move_prob = args$local_move_prob,
+    mean_active_sources = args$mean_active_sources,
+    active_eps = args$active_eps,
+    hybrid_active_search = as.logical(args$hybrid_active_search),
+    max_active_sources = args$max_active_sources,
+    active_search_slots = args$active_search_slots,
+    active_search_iter = args$active_search_iter,
+    active_search_burnin = args$active_search_burnin,
+    active_search_thin = args$active_search_thin,
+    active_search_jump_prob = args$active_search_jump_prob
+  )$p
+}
+
+cv_out_path <- if (!is.null(args$cv_out)) {
+  args$cv_out
+} else {
+  sub("(\\.tsv)?(\\.gz)?$", ".cv.tsv", args$out_file)
+}
+
+run_cv <- function() {
+  cat(sprintf("__ chromosome hold-out evaluation: --cv %s (%s) __\n", args$cv, args$method))
+  chroms <- as.character(n_markers$chrom)
+  folds <- cv_make_folds(args$cv, chroms, n_markers$n)
+  cv_check_folds_present(folds, unique(ibd_pop$chrom))
+  for (fd in folds) {
+    cat(sprintf(
+      "   fold %-12s fit on %2d chr, score on %2d chr (%s)\n",
+      fd$name, length(fd$train), length(fd$test), paste(fd$test, collapse = ",")
+    ))
+  }
+
+  ## per-chromosome raw sums, same construction as the NNLS jackknife
+  by_chrom_t <- map(setNames(chroms, chroms), function(i) {
+    ibd_pop |>
+      filter(sample1 %in% target_samples, chrom == i) |>
+      get_sum_matrix(all_pops, sample1, pop_id2) |>
+      align_matrix_cols(target_samples)
+  })
+  by_chrom_s <- map(setNames(chroms, chroms), function(i) {
+    ibd_pop |>
+      filter(sample1 %in% source_samples, chrom == i) |>
+      get_sum_matrix(all_pops, pop_id1, pop_id2) |>
+      align_matrix_cols(source_pops)
+  })
+  sum_over <- function(m, ch) reduce(m[ch], `+`)
+
+  fit_fun <- if (args$method == "bayesian") cv_bayes_fit else cv_fit_nnls
+
+  cv_tab <- map_dfr(folds, function(fd) {
+    t0 <- Sys.time()
+    res <- cv_run_fold(
+      fold = fd,
+      fit_fun = fit_fun,
+      Ttr = normalize_matrix_cols(sum_over(by_chrom_t, fd$train)),
+      Str = normalize_matrix_cols(sum_over(by_chrom_s, fd$train)),
+      Tte_raw = sum_over(by_chrom_t, fd$test),
+      Ste_raw = sum_over(by_chrom_s, fd$test),
+      self_row = target_self_row,
+      self_src = target_self_src,
+      n_chunks = 4L * args$threads
+    )
+    cat(sprintf(
+      "   fold %-12s done in %.1f min\n", fd$name,
+      as.numeric(difftime(Sys.time(), t0, units = "mins"))
+    ))
+    res
+  })
+
+  cv_tab <- cv_tab |>
+    left_join(distinct(select(sample_map, sample_id, pop_id), sample_id, .keep_all = TRUE),
+      by = "sample_id"
+    ) |>
+    relocate(pop_id, .after = sample_id)
+
+  cat("__ writing CV table: ", cv_out_path, " __\n", sep = "")
+  dir.create(dirname(cv_out_path), showWarnings = FALSE, recursive = TRUE)
+  write_tsv(cv_tab, file = cv_out_path)
+
+  cv_tab |>
+    group_by(fold) |>
+    summarise(
+      n = n(),
+      n_na = sum(is.na(res_test_ex_self)),
+      med_res_train = median(res_train_ex_self, na.rm = TRUE),
+      med_res_test = median(res_test_ex_self, na.rm = TRUE),
+      med_ll_test = median(ll_test, na.rm = TRUE),
+      med_active = median(n_active),
+      .groups = "drop"
+    ) |>
+    as.data.frame() |>
+    print()
+  invisible(cv_tab)
+}
+
+if (args$cv_only == 1L) {
+  run_cv()
+  cat("__ done! (cv only) __\n")
+  quit(save = "no", status = 0)
+}
 
 ## target sharing matrix (populations x target samples)
 ibd_pop_target <- ibd_pop |>
@@ -1262,5 +1431,9 @@ cat("__ writing output __\n")
 write_tsv(o,
   file = args$out_file
 )
+
+if (args$cv != "none") {
+  run_cv()
+}
 
 cat("__ done! __\n")

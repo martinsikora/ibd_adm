@@ -353,6 +353,11 @@ MIX_THREADS = int(config.get("mixture", {}).get("threads", 12))
 ## Negative means unseeded. Applies to BOTH methods: the hybrid slot search
 ## and the jackknife resampling are stochastic in nnls mode too.
 MIX_SEED = int(config.get("mixture", {}).get("seed", -1))
+## Chromosome hold-out CV for the NNLS fits: none | evenodd | loco | k<K> | test:<chroms>.
+## Writes <out>.cv.tsv next to the main table (undeclared side output); the main
+## table is unchanged. Not applied to the Bayesian fits (refits every fold; loco
+## is disallowed there) -- run those by hand with --cv evenodd --cv_only 1.
+MIX_CV = str(config.get("mixture", {}).get("cv", "none"))
 MIX_MCMC_ITER = config.get("mixture", {}).get("mcmc_iter", 200000)
 MIX_BURNIN = config.get("mixture", {}).get("burnin", 20000)
 MIX_THIN = config.get("mixture", {}).get("thin", 5)
