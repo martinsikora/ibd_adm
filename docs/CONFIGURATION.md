@@ -116,6 +116,7 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.enabled` | `true` | bool | Master switch. |
 | `mixture.method` | `both` | `nnls` \| `bayesian` \| `both` \| list | Which estimator(s) to run. `both` = NNLS + Bayesian. |
 | `mixture.threads` | `48` | int | `future` workers per `run_models` job (parallel across targets). |
+| `mixture.cv` | `none` | `none` \| `evenodd` \| `loco` \| `k<K>` \| `test:<chroms>` | Chromosome hold-out CV for the NNLS fits: weights are fitted on the training chromosomes and scored on the held-out ones, writing `<out>.cv.tsv` next to the main table (main table unchanged). `evenodd` = fit even/score odd and the reverse; `loco` = one fold per chromosome; `k<K>` = K marker-balanced blocks; `test:1,3-5` = one custom fold. Rank models on `ll_test` (held-out multinomial log-likelihood per unit IBD) using paired same-fold differences. Held-out chromosomes cannot reveal a source that is missing from every chromosome, and relatives among the sources make targets score optimistically. Not applied to Bayesian fits; run those by hand with `--cv evenodd --cv_only 1`. |
 | `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts for IBD length weighting. |
 
 **Bayesian MCMC** (only used when `method` includes `bayesian`):
