@@ -693,7 +693,7 @@ parser$add_argument("--palette_scale",
   dest = "palette_scale",
   type = "character",
   default = "raw",
-  help = "raw: sources are mean per-individual palettes in cM (own cluster rescaled for the donor count), the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
+  help = "raw: sources are mean per-individual palettes in cM, the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
 )
 
 parser$add_argument("--max_active_sources",
@@ -1201,12 +1201,11 @@ if (!args$palette_scale %in% c("normalized", "raw")) stop("--palette_scale must 
 raw_scale <- identical(args$palette_scale, "raw")
 if (raw_scale && args$cv != "none") stop("--palette_scale raw is not supported together with --cv; use --palette_scale normalized")
 n_src_ind <- table(sub("_r$", "", sample_info$pop_id[sample_info$group %in% "source" & sample_info$pop_id != "exclude"]))
-donor_n <- table(sample_info$pop_id[!grepl("_r$", sample_info$pop_id) & sample_info$pop_id != "exclude"])
 ibd_pop_source_fit <- if (raw_scale) {
   ibd_pop |>
     filter(sample1 %in% source_samples) |>
     get_sum_matrix(all_pops, pop_id1, pop_id2) |>
-    raw_source_matrix(n_src_ind, donor_n)
+    raw_source_matrix(n_src_ind)
 } else {
   ibd_pop_source
 }
@@ -1299,7 +1298,7 @@ if (args$method == "bayesian") {
   ibd_pop_source <- normalize_matrix_cols(total_source_sum)
   ## the NNLS branch aligns the source columns to source_pops; rebuild the raw matrix in the same order
   if (raw_scale) {
-    ibd_pop_source_fit <- raw_source_matrix(total_source_sum, n_src_ind, donor_n)
+    ibd_pop_source_fit <- raw_source_matrix(total_source_sum, n_src_ind)
     stopifnot(identical(colnames(ibd_pop_source_fit), colnames(ibd_pop_source)),
               identical(rownames(ibd_pop_source_fit), rownames(ibd_pop_source)))
   }
@@ -1354,7 +1353,7 @@ if (args$method == "bayesian") {
     ibd_pop_target_i <- normalize_matrix_cols(total_target_sum - chrom_target_sum[[i]])
     ibd_pop_source_i <- normalize_matrix_cols(total_source_sum - chrom_source_sum[[i]])
 
-    if (raw_scale) ibd_pop_source_raw_i <- raw_source_matrix(total_source_sum - chrom_source_sum[[i]], n_src_ind, donor_n)
+    if (raw_scale) ibd_pop_source_raw_i <- raw_source_matrix(total_source_sum - chrom_source_sum[[i]], n_src_ind)
 
     map_dfr(target_samples, function(x) {
       r <- if (raw_scale) {

@@ -9,13 +9,12 @@ S <- cbind(a = c(2, 1, 1), b = c(1, 3, 0))
 ok(all.equal(model_pred(S, c(.5, .5), raw = FALSE), c(1.5, 2, .5)), "normalised mode returns S p unchanged")
 ok(all.equal(sum(model_pred(S, c(.5, .5), raw = TRUE)), 1), "raw mode returns a proportion vector")
 
-## raw_source_matrix: per-individual mean, own column rescaled by n / (n - 1)
+## raw_source_matrix: per-individual mean of the summed source palettes
 sum_mat <- cbind(A = c(40, 10, 0), B = c(5, 60, 20))
 rownames(sum_mat) <- c("A", "B", "C")
-m <- raw_source_matrix(sum_mat, n_src = c(A = 4, B = 5), donor_n = c(A = 8, B = 6, C = 3))
-ok(all.equal(m["A", "A"], 40 / 4 * 8 / 7), "own entry of A is the mean times n/(n-1)")
-ok(all.equal(m["B", "B"], 60 / 5 * 6 / 5), "own entry of B is the mean times n/(n-1)")
-ok(all.equal(m["C", "B"], 20 / 5), "other entries are plain per-individual means")
+m <- raw_source_matrix(sum_mat, n_src = c(A = 4, B = 5))
+ok(all.equal(m["A", "A"], 40 / 4), "entries are the sum divided by the number of source individuals")
+ok(all.equal(m["C", "B"], 20 / 5), "every entry is a plain per-individual mean (no donor-count rescaling)")
 
 ## the point of the option: sources with unequal total IBD, exact mixture of the raw palettes
 S1 <- c(60, 20, 10, 10); S2 <- c(10, 10, 20, 10) # totals 100 and 50

@@ -57,11 +57,13 @@ Which file holds what:
 `mixture.palette_scale` (command line `--palette_scale`) has two settings.
 
 - `raw` (default): each source is the mean per-individual palette of its source
-  individuals, in cM. The cluster a source individual belongs to is rescaled by n / (n - 1),
-  because a source individual cannot share with itself while a target sees all n donors
-  of that cluster. The target palette is fitted up to a free overall scale and the
-  weights are normalised afterwards, so they are ancestry fractions. In the Bayesian
-  model the prediction is rescaled to sum to 1 before the likelihood.
+  individuals, in cM. No donor-count correction is applied: the aggregation sums every
+  individual's within-cluster entry over the n - 1 other cluster members and its
+  between-cluster entries over a random subset of n - 1 of the n donors, so source
+  individuals and targets are compared on the same number of donors. The target palette
+  is fitted up to a free overall scale and the weights are normalised afterwards, so they
+  are ancestry fractions. In the Bayesian model the prediction is rescaled to sum to 1
+  before the likelihood.
 - `normalized`: every palette is divided by its own total before fitting, which was the
   only behaviour before this option existed. A mixture of normalised palettes weights a
   source by its ancestry share times its total IBD per individual, so a source that

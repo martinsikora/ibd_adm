@@ -13,16 +13,11 @@ model_pred <- function(source_mat, p, raw = FALSE) {
   if (raw) q / sum(q) else q
 }
 
-## Raw-cM source matrix from the summed palettes of the source individuals: mean per individual in each
-## source population (n_src, named by population). A source individual cannot share with itself, so its
-## own-cluster entry is built from n - 1 donors; that entry is rescaled by n / (n - 1) to the n donors a
-## target sees (donor_n, named by population).
-raw_source_matrix <- function(sum_mat, n_src, donor_n) {
-  m <- sweep(sum_mat, 2, n_src[colnames(sum_mat)], "/")
-  for (k in colnames(m)) {
-    r <- match(k, rownames(m))
-    n <- donor_n[k]
-    if (!is.na(r) && !is.na(n) && n > 1) m[r, k] <- m[r, k] * n / (n - 1)
-  }
-  m
+## Raw-cM source matrix from the summed palettes of the source individuals: the mean per-individual palette of
+## each source population (n_src, named by population). No donor-count correction is needed for palettes from
+## aggregate_ibd.py: it sums every individual's within-cluster entry over the n - 1 other members and its
+## between-cluster entries over a random subset of n - 1 of the n donors, so a source individual and a target
+## are compared on the same number of donors.
+raw_source_matrix <- function(sum_mat, n_src) {
+  sweep(sum_mat, 2, n_src[colnames(sum_mat)], "/")
 }
