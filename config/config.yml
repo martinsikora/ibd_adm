@@ -265,6 +265,10 @@ mixture:
   active_eps: 1e-4
   hybrid_active_search: 1
   max_active_sources: 0
+  ## raw (default): sources are mean per-individual palettes in cM, the target is fitted up to a free scale and the
+  ## weights are normalised afterwards. normalized: every palette sums to 1 (the behaviour before this option
+  ## existed); it over-credits sources that carry more total IBD per individual. raw does not support --cv.
+  palette_scale: raw
   active_search_slots: 200
   active_search_iter: 1500
   active_search_burnin: 500

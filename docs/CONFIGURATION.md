@@ -190,6 +190,7 @@ Compare models on the same folds, as a paired per-target difference in `ll_test`
 | `mixture.adapt_target_accept` | `0.01` | fraction | Target acceptance rate for adaptation. |
 | `mixture.local_move_prob` | `1.0` | prob | Probability of a local (vs global) move. |
 | `mixture.mean_active_sources` | `6.0` | number | Prior mean number of active sources. |
+| `mixture.palette_scale` | `raw` | `raw`, `normalized` | How palettes are scaled before fitting; see the palette scale section of DIAGNOSTICS.md. `normalized` reproduces earlier runs. `raw` does not support `mixture.cv`. |
 | `mixture.active_eps` | `1e-4` | number | Threshold below which a source counts as inactive. |
 | `mixture.hybrid_active_search` | `1` | 0/1 | Toggle the hybrid active-source search. |
 | `mixture.max_active_sources` | `0` | int | Cap on simultaneously active sources (`0` = unlimited). |

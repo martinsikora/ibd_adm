@@ -41,6 +41,7 @@ def mix_diag_prefix(mix_dir, mix_panel):
 
 def mixmodel_extra_args(method):
     args = f"--method {method}"
+    args += f" --palette_scale {MIX_PALETTE_SCALE}"
     if MIX_SEED >= 0:
         args += f" --seed {MIX_SEED}"
     if method == "nnls" and MIX_CV != "none":

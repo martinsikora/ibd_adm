@@ -206,10 +206,10 @@ rhat_1d <- function(chain_draws) {
   sqrt(var_hat / w)
 }
 
-safe_pnnls <- function(source_mat, y) {
+safe_pnnls <- function(source_mat, y, raw = FALSE) {
   k <- ncol(source_mat)
   fit <- tryCatch(
-    pnnls(source_mat, y, sum = 1),
+    if (raw) pnnls(source_mat, y) else pnnls(source_mat, y, sum = 1),
     error = function(e) NULL
   )
   if (is.null(fit) || is.null(fit$x) || length(fit$x) != k) {
@@ -233,7 +233,8 @@ select_active_sources_slots <- function(
     burnin = 500,
     thin = 10,
     jump_prob = 0.1,
-    n_copies = 20000
+    n_copies = 20000,
+    raw_scale = FALSE
 ) {
   k <- ncol(source_mat)
   if (k <= 1 || max_active_sources >= k) {
@@ -249,7 +250,7 @@ select_active_sources_slots <- function(
 
   ll_from_slots <- function(assign) {
     p <- tabulate(assign, nbins = k) / length(assign)
-    q <- as.vector(source_mat %*% p)
+    q <- model_pred(source_mat, p, raw_scale)
     n_active <- sum(p > 0)
     ll <- n_copies * sum(y * log(pmax(q, 1e-16)))
     lp <- dpois(n_active, lambda = expected_active_sources, log = TRUE)
@@ -328,6 +329,7 @@ infer_sourcefind <- function(
     alpha_prior = 0.5,
     proposal_scale = 200,
     n_copies = 20000,
+    raw_scale = FALSE,
     n_chains = 4,
     adapt_burnin_frac = 0.5,
     adapt_interval = 200,
@@ -373,7 +375,8 @@ infer_sourcefind <- function(
       burnin = active_search_burnin,
       thin = active_search_thin,
       jump_prob = active_search_jump_prob,
-      n_copies = n_copies
+      n_copies = n_copies,
+      raw_scale = raw_scale
     )
   }
 
@@ -391,7 +394,7 @@ infer_sourcefind <- function(
   }
 
   log_post <- function(p) {
-    q <- as.vector(source_mat_fit %*% p)
+    q <- model_pred(source_mat_fit, p, raw_scale)
     ll <- n_copies * sum(y * log(pmax(q, 1e-16)))
     lp <- log_ddirichlet(p, alpha_vec)
     la <- log_active_prior(p)
@@ -410,7 +413,7 @@ infer_sourcefind <- function(
   }
   adapt_phase <- as.integer(max(0, min(burnin, floor(n_iter * adapt_burnin_frac))))
 
-  init_p <- safe_pnnls(source_mat_fit, y)
+  init_p <- safe_pnnls(source_mat_fit, y, raw = raw_scale)
   chain_samples <- vector("list", n_chains)
   chain_accept <- numeric(n_chains)
   chain_ess <- matrix(NA_real_, nrow = n_chains, ncol = k_fit)
@@ -505,7 +508,7 @@ infer_sourcefind <- function(
   p_sd <- rep(0, k)
   p_mean[selected_idx] <- p_mean_fit
   p_sd[selected_idx] <- p_sd_fit
-  pred <- as.vector(source_mat %*% p_mean)
+  pred <- model_pred(source_mat, p_mean, raw_scale)
   res_norm <- sqrt(mean((pred - y)^2))
 
   list(
@@ -685,6 +688,14 @@ parser$add_argument("--hybrid_active_search",
   help = "Enable slot-based active-source search before continuous refinement (0/1) [default %(default)s]"
 )
 
+parser$add_argument("--palette_scale",
+  action = "store",
+  dest = "palette_scale",
+  type = "character",
+  default = "raw",
+  help = "raw: sources are mean per-individual palettes in cM (own cluster rescaled for the donor count), the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
+)
+
 parser$add_argument("--max_active_sources",
   action = "store",
   dest = "max_active_sources",
@@ -823,9 +834,10 @@ if (args$cv_only == 1L && args$cv == "none") {
 if (args$cv == "loco" && args$method == "bayesian") {
   stop("--cv loco with the Bayesian estimator would run 22 MCMC refits per target; use evenodd, k<K> or test:<chroms>")
 }
+.script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+.script_dir <- if (length(.script_arg)) dirname(normalizePath(sub("^--file=", "", .script_arg[1]))) else "."
+source(file.path(.script_dir, "mixmodel_palette.R"))
 if (args$cv != "none") {
-  .script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
-  .script_dir <- if (length(.script_arg)) dirname(normalizePath(sub("^--file=", "", .script_arg[1]))) else "."
   source(file.path(.script_dir, "mixmodel_cv.R"))
 }
 
@@ -1185,12 +1197,28 @@ ibd_pop_source <- ibd_pop |>
   filter(sample1 %in% source_samples) |>
   get_palette_matrix(all_pops, pop_id1, pop_id2)
 
+if (!args$palette_scale %in% c("normalized", "raw")) stop("--palette_scale must be normalized or raw")
+raw_scale <- identical(args$palette_scale, "raw")
+if (raw_scale && args$cv != "none") stop("--palette_scale raw is not supported together with --cv; use --palette_scale normalized")
+n_src_ind <- table(sub("_r$", "", sample_info$pop_id[sample_info$group %in% "source" & sample_info$pop_id != "exclude"]))
+donor_n <- table(sample_info$pop_id[!grepl("_r$", sample_info$pop_id) & sample_info$pop_id != "exclude"])
+ibd_pop_source_fit <- if (raw_scale) {
+  ibd_pop |>
+    filter(sample1 %in% source_samples) |>
+    get_sum_matrix(all_pops, pop_id1, pop_id2) |>
+    raw_source_matrix(n_src_ind, donor_n)
+} else {
+  ibd_pop_source
+}
+
+stopifnot(identical(colnames(ibd_pop_source_fit), colnames(ibd_pop_source)))
 if (args$method == "bayesian") {
   cat("__ estimating Bayesian coefficients __\n")
   p_full <- future_map_dfr(target_samples, function(x) {
     fit <- infer_sourcefind(
       y = ibd_pop_target[, x],
-      source_mat = ibd_pop_source,
+      source_mat = ibd_pop_source_fit,
+      raw_scale = raw_scale,
       n_iter = args$mcmc_iter,
       burnin = args$burnin,
       thin = args$thin,
@@ -1222,7 +1250,7 @@ if (args$method == "bayesian") {
       res_norm_rmse = fit$res_norm,
       res_norm_ex_self = res_norm_ex_self(
         ibd_pop_target[, x],
-        as.vector(ibd_pop_source %*% fit$p),
+        model_pred(ibd_pop_source_fit, fit$p, raw_scale),
         target_self_row[[x]]
       ),
       self_share = ifelse(is.na(target_self_row[[x]]),
@@ -1269,24 +1297,36 @@ if (args$method == "bayesian") {
   total_source_sum <- reduce(chrom_source_sum, `+`)
   ibd_pop_target <- normalize_matrix_cols(total_target_sum)
   ibd_pop_source <- normalize_matrix_cols(total_source_sum)
+  ## the NNLS branch aligns the source columns to source_pops; rebuild the raw matrix in the same order
+  if (raw_scale) {
+    ibd_pop_source_fit <- raw_source_matrix(total_source_sum, n_src_ind, donor_n)
+    stopifnot(identical(colnames(ibd_pop_source_fit), colnames(ibd_pop_source)),
+              identical(rownames(ibd_pop_source_fit), rownames(ibd_pop_source)))
+  }
 
   p_genome <- future_map_dfr(target_samples, function(x) {
-    r <- pnnls(
-      ibd_pop_source,
-      ibd_pop_target[, x],
-      sum = 1
-    )
+    r <- if (raw_scale) {
+      pnnls(ibd_pop_source_fit, total_target_sum[, x])
+    } else {
+      pnnls(ibd_pop_source, ibd_pop_target[, x], sum = 1)
+    }
+    ## raw scale: free overall scale, weights normalised afterwards, residual reported on the proportion scale
+    rn <- r$rnorm
+    if (raw_scale) {
+      r$x <- r$x / sum(r$x)
+      rn <- sqrt(sum((model_pred(ibd_pop_source_fit, r$x, TRUE) - ibd_pop_target[, x])^2))
+    }
       tibble(
         sample_id = x,
         source_pop = colnames(ibd_pop_source),
         p = r$x,
-        res_norm = r$rnorm,
+        res_norm = rn,
         ## pnnls returns an L2 norm, sqrt(length(y)) larger than the bayesian
         ## res_norm; this is the same figure on the bayesian scale
-        res_norm_rmse = r$rnorm / sqrt(nrow(ibd_pop_target)),
+        res_norm_rmse = rn / sqrt(nrow(ibd_pop_target)),
         res_norm_ex_self = res_norm_ex_self(
           ibd_pop_target[, x],
-          as.vector(ibd_pop_source %*% r$x),
+          model_pred(ibd_pop_source_fit, r$x, raw_scale),
           target_self_row[[x]]
         ),
         self_share = ifelse(is.na(target_self_row[[x]]),
@@ -1314,12 +1354,15 @@ if (args$method == "bayesian") {
     ibd_pop_target_i <- normalize_matrix_cols(total_target_sum - chrom_target_sum[[i]])
     ibd_pop_source_i <- normalize_matrix_cols(total_source_sum - chrom_source_sum[[i]])
 
+    if (raw_scale) ibd_pop_source_raw_i <- raw_source_matrix(total_source_sum - chrom_source_sum[[i]], n_src_ind, donor_n)
+
     map_dfr(target_samples, function(x) {
-      r <- pnnls(
-        ibd_pop_source_i,
-        ibd_pop_target_i[, x],
-        sum = 1
-      )
+      r <- if (raw_scale) {
+        pnnls(ibd_pop_source_raw_i, (total_target_sum - chrom_target_sum[[i]])[, x])
+      } else {
+        pnnls(ibd_pop_source_i, ibd_pop_target_i[, x], sum = 1)
+      }
+      if (raw_scale) r$x <- r$x / sum(r$x)
       tibble(
         sample_id = x,
         source_pop = colnames(ibd_pop_source_i),

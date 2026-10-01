@@ -12,10 +12,13 @@ Contents: [What is fitted](#what-is-fitted) · [Estimates and uncertainty](#esti
 
 ## What is fitted
 
-Every individual has a palette: the total IBD (cM) it shares with each donor population,
-normalised to sum to 1. For a target, the model finds non-negative weights `p` that sum
-to 1 so that the weighted sum of the source palettes reproduces the target palette.
-Two estimators are available:
+Every individual has a palette: the total IBD (cM) it shares with each donor population.
+For a target, the model finds non-negative weights `p` that sum to 1 so that the weighted
+sum of the source palettes reproduces the target palette. How the palettes are scaled is
+set by `mixture.palette_scale` (see [Palette scale](#palette-scale)): with the default
+`raw`, the source palettes are mean per-individual palettes in cM and the target palette
+is fitted up to a free overall scale; with `normalized`, every palette is first divided
+by its own total. Two estimators are available:
 
 - `nnls`: sum-to-one non-negative least squares. One point estimate per target, with a
   jackknife standard error.
@@ -25,9 +28,12 @@ Two estimators are available:
 
 Two things follow from this and matter for every number below.
 
-1. `p` is a share of **IBD**, not of the genome. A source that emits more IBD into the
-   panel per unit of ancestry (a higher R, see [Source R flags](#source-r-flags)) gets
-   more weight than its ancestry alone justifies, and the reverse for a low-R source.
+1. With `palette_scale: normalized`, `p` is a share of **IBD**, not of the genome. A source
+   that emits more IBD into the panel per unit of ancestry (a higher R, see
+   [Source R flags](#source-r-flags)) gets more weight than its ancestry alone justifies,
+   and the reverse for a low-R source. With the default `raw` this dependence on the
+   total IBD of the sources is removed, but not every offset is: a source that is only a
+   relative of the true source still shares less IBD with the target than with itself.
    Compare `p` between targets fitted with the same sources, and be careful comparing it
    across sources.
 2. A palette can only be reproduced from the sources you supply. If an ancestry is
@@ -45,6 +51,30 @@ Which file holds what:
 | `diagnostics/*.residual_diagnostic.source_flags.tsv` | source | both |
 | `diagnostics/*.source_R_flags.tsv` | source | none (uses profiles only) |
 | `diagnostics/*.target_R_flags.tsv` | target | Bayesian |
+
+## Palette scale
+
+`mixture.palette_scale` (command line `--palette_scale`) has two settings.
+
+- `raw` (default): each source is the mean per-individual palette of its source
+  individuals, in cM. The cluster a source individual belongs to is rescaled by n / (n - 1),
+  because a source individual cannot share with itself while a target sees all n donors
+  of that cluster. The target palette is fitted up to a free overall scale and the
+  weights are normalised afterwards, so they are ancestry fractions. In the Bayesian
+  model the prediction is rescaled to sum to 1 before the likelihood.
+- `normalized`: every palette is divided by its own total before fitting, which was the
+  only behaviour before this option existed. A mixture of normalised palettes weights a
+  source by its ancestry share times its total IBD per individual, so a source that
+  carries more total IBD is over-credited. The size of this effect depends on the ratio
+  of the total IBD of the sources over the donor panel, and changes with the donor set.
+
+In simulations with known ancestry (two sources, one admixed target, 22 chromosomes) the
+`normalized` fit overestimated the share of the source with more total IBD by 0.03 to 0.04
+at mixed targets, and `raw` changed this to a small bias of 0.01 to 0.02 in the other
+direction, from sources that are relatives of the true sources and not the sources
+themselves. Results from earlier runs used `normalized`; set `palette_scale: normalized`
+to reproduce them. `raw` does not support `--cv`, and the workflow stops with a message if
+`mixture.cv` is set together with it.
 
 ## Estimates and uncertainty
 
