@@ -124,6 +124,10 @@ clustering:
 
 aggregation:
   max_concurrent_ibd_jobs: 8
+  # Optional. aggregate_ibd.py leaves out one random donor per cluster from the between-cluster entries so that
+  # they and the within-cluster entry are sums over the same number of donors (n - 1). Unset: a new draw per
+  # chromosome and per run, so palettes differ slightly between reruns. Set an integer for reproducible palettes.
+  # seed: 1
   # A cluster whose samples are all `recipient` still has a well-defined profile
   # over the donor palette (aggregate_ibd.py restricts only the donor side), but
   # by default it is invisible: tvd_matrix.py drops it from the TVD matrix, and

@@ -1,3 +1,17 @@
+def agg_seed_arg(chrom):
+    """--seed for the random donor left out of the between-cluster entries (aggregate_ibd.py). Unset by
+    default (a new draw per chromosome and per run). With `aggregation.seed` set, the seed is that value plus
+    the chromosome number, so a rerun reproduces the palettes and the left-out donor still differs between
+    chromosomes."""
+    base = config.get("aggregation", {}).get("seed")
+    if base is None:
+        return ""
+    try:
+        return f"--seed {int(base) + int(chrom)}"
+    except ValueError:
+        return f"--seed {int(base) + sum(ord(c) for c in str(chrom))}"
+
+
 def cluster_agg_dir(height):
     return f"{PANELS_DIR}/{cluster_panel_name(height)}/aggregation"
 
@@ -114,10 +128,12 @@ if ENABLE_DEFAULT_PIPELINE:
             aggregation_ibd_jobs=1
         priority:
             80
+        params:
+            seed_arg=lambda wc: agg_seed_arg(wc.chrom),
         shell:
             """
             mkdir -p $(dirname {output})
-            python3 workflow/scripts/python/aggregate_ibd.py -i {input.ibd_file} -s {input.sample_file} -o {output}
+            python3 workflow/scripts/python/aggregate_ibd.py -i {input.ibd_file} -s {input.sample_file} -o {output} {params.seed_arg}
             """
 
 
@@ -134,10 +150,12 @@ if CUSTOM_PANELS:
             aggregation_ibd_jobs=1
         priority:
             80
+        params:
+            seed_arg=lambda wc: agg_seed_arg(wc.chrom),
         shell:
             """
             mkdir -p {PANELS_DIR}/{wildcards.panel}/aggregation/tables
-            python3 workflow/scripts/python/aggregate_ibd.py -i {input.ibd_file} -s {input.sample_file} -o {output}
+            python3 workflow/scripts/python/aggregate_ibd.py -i {input.ibd_file} -s {input.sample_file} -o {output} {params.seed_arg}
             """
 
 
