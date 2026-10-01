@@ -60,8 +60,8 @@ def main():
     groups = [r[2] if len(r) >= 3 else '' for r in body]
     # `dropped` only subtracts from `forced` here (panel_pops.resolve does that)
     # -- it must NOT remove rows. The sample_map defines which samples the model
-    # fits at all, so excluding a pop from the TVD tree should not silently drop
-    # its samples from the mixmodel; they simply keep the default "_r".
+    # fits at all, so excluding a pop from the TVD tree should not drop its
+    # samples from the mixmodel; they keep the default "_r".
     forced, _ = panel_pops.resolve(pop_ids, groups, args)
     panel_pops.report(forced, set(), 'the mixmodel sample_map')
 

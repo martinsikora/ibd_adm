@@ -21,7 +21,7 @@
 ## residual r = S %*% p - y per target CLUSTER, and projects the unexplained
 ## part (y - pred) onto every *unused* population to find what a deep/distal
 ## source is standing in for. Flags sources that behave as bad deep proxies:
-## heavy loading + low residual (absorber) + structured leftover pointing at an
+## large weight + low residual (absorber) + structured leftover pointing at an
 ## unused population + large nnls/bayesian discordance.
 ##
 ## It also runs a PER-STRATUM SINK TEST (see below), which catches a failure
@@ -32,7 +32,7 @@
 ## correlated +0.70 with res_norm and +0.54 with cluster endogamy, taking 0.74 of
 ## Pulliyar and 0.60 of Palliyar -- the most inbred clusters in the panel. Its
 ## sibling dead-end Tianyuan/AR33K, over the same targets, scored +0.15 and +0.14
-## and was tracking a real ancestry axis (r = -0.74 against the West Eurasian
+## and was tracking an ancestry axis (r = -0.74 against the West Eurasian
 ## sources, i.e. the ASI/AASI cline). Both are >40 ka lineages with no
 ## descendants; only the stratified test tells them apart.
 
@@ -225,7 +225,7 @@ write_tsv(cl_res, paste0(OUT, ".cluster_residuals.tsv"))
 ## was used to decide which sources were "deep" enough to flag. That test only
 ## worked on panels whose pop_id embeds a descriptive alias: on any default
 ## panel the pop_id is a bare cluster label (C5_2_1_0), the regex never matched,
-## and every flag column silently came out FALSE. Distality is read off the same
+## and every flag column came out FALSE. Distality is read off the same
 ## palette geometry the diagnostic already uses, so it behaves identically
 ## whatever the labelling scheme.
 tgt_w <- smap |>
@@ -279,7 +279,7 @@ flag <- lapply(src_pops, function(s) {
 ## sources, so its global correlation with the residual is diluted to nothing.
 ## Within a stratum the signature is unambiguous -- weight that rises with
 ## res_norm is absorbing misfit, weight that rises with endogamy is absorbing
-## drift, and neither is ancestry. A real component correlates with neither, and
+## drift, and neither is ancestry. An ancestry component correlates with neither, and
 ## loads on well-fit clusters (see the Tianyuan/Ust'-Ishim contrast in the header).
 ## for each element, the largest of the OTHER elements (-Inf if there is none)
 max_other <- function(v) {
@@ -320,7 +320,7 @@ sink_tbl <- lapply(strata_ids, function(st) {
   ## and none of them is specifically the intercept. Measured: in the 230-cluster
   ## European stratum EastEurope_Mesolithic (+0.52) and Georgia_UP (+0.49) tie,
   ## and in the AASI sub-block Japan_Jomon (+0.60, at mean_p 0.000), Tianyuan
-  ## (+0.56) and SouthAmerica_Paleoindian (+0.50) all clear the bar. A real sink
+  ## (+0.56) and SouthAmerica_Paleoindian (+0.50) all clear the bar. A sink
   ## stands alone: Ust'-Ishim over South Asia is +0.71 with the runner-up at
   ## +0.39, Tagalog over Melanesia +0.72 with the runner-up at 0.00. So require
   ## the source to be the only one over the bar AND clear of the next by a
@@ -337,7 +337,7 @@ sink_tbl <- lapply(strata_ids, function(st) {
   mutate(
     r_res_gap = ifelse(is.finite(r_res_gap), r_res_gap, r_res),
     ## Coupling to res_norm is NECESSARY, and drift coupling only corroborates.
-    ## Drift coupling alone is not evidence of a sink: a genuinely proximate
+    ## Drift coupling alone is not evidence of a sink: a proximate
     ## source takes a larger share in the more endogamous members of its own
     ## stratum simply because they are less admixed. Measured here: JuHoan scores
     ## r_endog = +0.57 over the KhoeSan stratum while being exactly the right
@@ -356,7 +356,7 @@ write_tsv(sink_tbl, paste0(OUT, ".source_sink_by_stratum.tsv"))
 ## Distality alone cannot tell a BASAL ANCESTOR of the targets from an
 ## UNANCHORED profile: both sit close to the target mass and both look diffuse.
 ## The split is at which level the diffuseness lives. A lineage basal to one
-## clade shares broadly *inside* that clade and little outside it; a genuinely
+## clade shares broadly *inside* that clade and little outside it; an
 ## unanchored profile is smeared across clades. Measuring the effective number
 ## of strata a source's profile spans separates them where distality inverts
 ## them -- NEO283 (Kotias Klde 25.7 ka, Dzudzuana-related, ancestral to later
@@ -365,7 +365,7 @@ write_tsv(sink_tbl, paste0(OUT, ".source_sink_by_stratum.tsv"))
 ## West Eurasia, landing beside Satsurblia (4.14) and EastEurope_Mesolithic
 ## (4.11). Ust'-Ishim, more distal at 0.538, spans 8.65 strata with a top share
 ## of 0.213 and only 34.4% on West Eurasia. Low distality plus few strata is a
-## deep source doing real work; many strata is the intercept.
+## deep source that carries ancestry; many strata is the intercept.
 cat("__ clade confinement per source __\n")
 strat_of <- stratum[targets]
 clade <- lapply(src_pops, function(s) {

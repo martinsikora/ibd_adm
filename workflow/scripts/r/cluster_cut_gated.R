@@ -22,7 +22,7 @@
 ## test -- see the caveat below.
 ##
 ## Motivation. A single cut height cannot suit the whole panel. Going from
-## h0.5 to h0.3 on the ho_20260806 nscale tree resolves real populations in the
+## h0.5 to h0.3 on the ho_20260806 nscale tree resolves populations in the
 ## Americas (Mayan/Zapotec, Wayku/Guarani, Andean coast/highland: 7 balanced
 ## splits, 0 arbitrary) and in later Europe (18 informative / 4 arbitrary), but
 ## in Africa and South Asia the same step mostly shreds single sampled
@@ -40,7 +40,7 @@
 ## the rest; it does not distinguish good splits from bad ones *within* them.
 ## African informative vs arbitrary splits sit at 17.9k vs 14.8k median sharing,
 ## South Asian ones at 125-188k vs 123-161k -- overlapping. So the gate freezes
-## low-sharing clusters wholesale, suppressing ~13 genuine distinctions
+## low-sharing clusters wholesale, suppressing ~13 true distinctions
 ## (Sugali/Adi_Dravider, Tiwari/Bhumihar, ...) along with the spurious ones. It
 ## buys Americas/Europe resolution at the price of no refinement anywhere the
 ## data are thin. A metadata-based guard scored better (AUC 0.885) but was
@@ -76,8 +76,8 @@ parser$add_argument("--min_sharing", dest = "min_sharing", type = "double",
   help = "Median per-sample total IBD (cM) a coarse cluster needs before its finer splits are used [default %(default)s]") # nolint
 parser$add_argument("--base_height", dest = "base_height", default = NULL)
 parser$add_argument("--fine_height", dest = "fine_height", default = NULL)
-## NOTE: there is deliberately no minimum-daughter-size option here. Tiny
-## (1-2 member) sub-clusters are a real problem, but they are the job of
+## NOTE: there is no minimum-daughter-size option here. Tiny
+## (1-2 member) sub-clusters are a problem, but they are handled by
 ## dynamicTreeCut's own minClusterSize -- `clustering.cl_size` in config.yml,
 ## passed to cluster_cut.R. Raising it from 2 to 3 removes every sub-3 cluster
 ## at the CUT stage (151 -> 0 at h0.5), which is strictly better than reverting

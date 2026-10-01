@@ -17,7 +17,7 @@
 #
 # A source with raw p below PMIN cannot escalate the tier: dividing a p of 1e-4 by the
 # panel's smallest R manufactures a sizeable share out of nothing (47 Patterson targets
-# on an axis with no real offset in the first version).
+# on an axis with no offset in the first version).
 #
 # Tiers: HIGH if the R-corrected share on SEVERE sources is >= HIGH; MODERATE if the share
 # on WARN sources is >= MODERATE; LOW if the total flagged share is >= LOW; else none.

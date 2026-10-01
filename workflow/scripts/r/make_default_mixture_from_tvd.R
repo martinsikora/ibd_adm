@@ -151,9 +151,9 @@ topology_leaf_dist <- function(hc) {
 ## Select, per TVD cluster, the population sitting furthest from its divergence
 ## point -- i.e. the tip with the longest terminal (pendant) branch on an NJ
 ## tree. Long pendant = strong population-specific drift with little shared
-## post-divergence history => a well-differentiated, "clean" source surrogate.
+## post-divergence history => a well-differentiated source surrogate.
 ## A size guard drops singleton/low-support tips whose long branch may be an
-## artifact (e.g. low coverage) rather than genuine drift.
+## artifact (e.g. low coverage) rather than drift.
 pick_differentiated <- function(
     dist_mat,
     pops,
@@ -323,14 +323,14 @@ pick_differentiated_spread <- function(
 ## no allele frequencies -- just the population-by-population TVD matrix.
 ##
 ## Validated on the ho_20260806 h0.5 panel: the minimising (A, B) pair recovers
-## the real admixture sources -- Siddi_Karnataka 0.008 (Agarwal / Tswana),
+## the known admixture sources -- Siddi_Karnataka 0.008 (Agarwal / Tswana),
 ## AfricanAmerican 0.021 (Chuvash / YRI), Aleut 0.002 (Mordovian / NeoAleut),
 ## Russian_Archangelsk 0.012 (Russian_Vologda / Yakutia_LateNeolithic) -- while
 ## unadmixed sources score an order of magnitude higher: Morocco_HG 0.237,
 ## Marianas_Latte 0.235, Jomon 0.165, Haiom 0.157.
 ##
 ## sep_q restricts A,B to pairs at least that quantile apart, so "between" means
-## between two genuinely distinct ancestries rather than between two neighbours.
+## between two distinct ancestries rather than between two neighbours.
 admix_slack <- function(dist_mat, cand_idx, sep_q = 0.75) {
   n <- nrow(dist_mat)
   out <- rep(Inf, n)
@@ -382,7 +382,7 @@ mix_residual <- function(y, S) {
 ## Differentiated + unadmixed picker.
 ##
 ## Same target-mass-balanced clade partition as differentiated_spread (so the
-## sources stay proximate to where the target diversity actually is), but the
+## sources stay proximate to where the target diversity is), but the
 ## within-clade representative is chosen by three criteria instead of pendant
 ## length alone:
 ##   1. size guard (min_size), hard;
@@ -393,7 +393,7 @@ mix_residual <- function(y, S) {
 ##      position is least reproducible as a convex mixture of the sources
 ##      already selected, scaled by drift (pendant length) via drift_weight.
 ##
-## The greedy step is what makes this robust where a plain "reconstructible by
+## The greedy step works where a plain "reconstructible by
 ## others" test is not: an admixed population lies inside the cone spanned by
 ## its parents, so once the parents are selected it can never win. Testing
 ## against *all* populations instead would also reject Iran_Neolithic (0.93

@@ -16,7 +16,7 @@
 
 ## Stage 3: hierarchical clustering of the cluster_full individuals. Also
 ## precomputes the tree-only hierarchy strings (cl_hier / cl_ids_expand) so the
-## per-height cut stage stays cheap. Shared across all cut heights.
+## per-height cut stage is fast. Shared across all cut heights.
 
 suppressPackageStartupMessages({
   library(argparse)

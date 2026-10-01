@@ -189,10 +189,9 @@ rhat_1d <- function(chain_draws) {
   w <- mean(chain_vars)
   if (!is.finite(w) || w <= 0) {
     ## 2026-08-21: this branch used to return 1 unconditionally, which reports
-    ## PERFECT convergence for a component that never moved. Harmless when all
-    ## chains sit at the same constant (genuinely converged), but it also
-    ## laundered the opposite case -- every chain frozen at a DIFFERENT value,
-    ## which is maximal non-convergence -- into a clean bill of health.
+    ## perfect convergence for a component that never moved. That is correct when all
+    ## chains sit at the same constant, but it also hid the opposite case: every
+    ## chain frozen at a DIFFERENT value, which is maximal non-convergence.
     ## Zero within-chain variance with non-zero between-chain variance is
     ## R-hat = Inf, so say so and let rhat_max carry it.
     b0 <- var(chain_means)
@@ -874,8 +873,8 @@ if (args$cv != "none") {
 ## MCMC is chaotic, so it re-draws the whole trajectory -- a measured
 ## world_61_tune refit came out statistically equivalent yet different
 ## (rhat_max<1.1 47.7% -> 51.1%, median TVD 0.0057, max 0.0433). Given the
-## 2026-08-21 decision to seed for reproducibility, a free parser change that
-## silently invalidates every existing table is not worth 0.5 s.
+## 2026-08-21 decision to seed for reproducibility, a parser change that
+## invalidates every existing table is not worth 0.5 s.
 ## With readr the prefiltered read is bit-identical to the unfiltered one
 ## (verified), so seeded runs reproduce exactly.
 ##
@@ -1030,7 +1029,7 @@ source_samples <- sample_info |>
 ## they can be separated in the output/plots. That suffix is a labeling device
 ## only: the donor palette and source populations must use the base cluster
 ## label, matching the aggregated IBD data (pop_id1/pop_id2 never carry "_r").
-## Stripping it here keeps the model matrices on the real population set; the
+## Stripping it here keeps the model matrices on the base population set; the
 ## "_r" label is re-attached to the output via the sample_map join below.
 source_pops <- sample_info |>
   filter(group == "source", pop_id != "exclude") |>

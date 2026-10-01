@@ -68,7 +68,7 @@ args <- parser$parse_args()
 
 ## Bars are drawn with a hairline stroke: at linewidth 0.25 the outline is wider
 ## than a bar in a panel this size, so it covers most of the band and the plot
-## reads far darker than the palette actually is. Error bars and the 0/1 rules
+## reads far darker than the palette. Error bars and the 0/1 rules
 ## keep 0.25.
 BAR_LW <- 0.05
 

@@ -2,7 +2,7 @@
 ## Tests for mixmodel_cv.R. Run from the repo root:
 ##   Rscript workflow/scripts/r/test_mixmodel_cv.R
 ## Pulls the pure helper functions it depends on straight out of mixmodel_ibd.R
-## (evaluating only those assignments), so it tests the code that actually runs.
+## (evaluating only those assignments), so it tests the code that is run.
 suppressPackageStartupMessages({
   library(dplyr); library(purrr); library(tidyr); library(future); library(furrr); library(lsei)
 })
