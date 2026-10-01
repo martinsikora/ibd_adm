@@ -1,4 +1,6 @@
-# ibd_adm
+<h1 align="center">
+  <img src="docs/assets/ibd_adm_logo.svg" alt="ibd_adm: ancestry from IBD sharing palettes" width="520">
+</h1>
 
 A Snakemake workflow for **IBD-based ancestry and admixture modelling**.
 
