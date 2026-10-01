@@ -16,8 +16,8 @@ prefix: example_dataset
 tmpdir: /path/to/scratch/ibd_adm
 
 ref:
-  # Reference FASTA. NOTE: currently read into the config dict but not consumed by
-  # any rule (reserved for future use); safe to leave as a placeholder.
+  # Reference FASTA. Reserved: read into the config but not used by any rule;
+  # can be left as a placeholder.
   fasta: /path/to/reference/genome.fa
   # Chromosome-length file (2 cols: chrom, length) used by `bedtools genomecov`
   # during masking. Must cover every chromosome in `chromosomes` below.
@@ -39,7 +39,7 @@ input_data:
   individuals: config/individuals.tsv
 
 masking:
-  # Cap on simultaneous masking IBD jobs (genomecov is IO-heavy).
+  # Cap on simultaneous masking IBD jobs (bedtools genomecov).
   max_concurrent_ibd_jobs: 8
   # Segment filters for the coverage/mask pass (short segments only).
   ibd_params:

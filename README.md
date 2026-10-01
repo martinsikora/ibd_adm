@@ -118,11 +118,11 @@ Columns 7–8 are ignored. Both sample ids must appear in `individuals.tsv`.
 
 ### Reference (`ref`)
 
-- `genome` — chromosome-length file (`chrom  length`) used by `bedtools genomecov`.
-- `chromosomes` — the chromosome list (`config/chromosomes.txt`).
-- `marker_file` — per-chromosome marker counts (`config/n_markers.tsv`), used by
+- `genome`: chromosome-length file (`chrom  length`) used by `bedtools genomecov`.
+- `chromosomes`: the chromosome list (`config/chromosomes.txt`).
+- `marker_file`: per-chromosome marker counts (`config/n_markers.tsv`), used by
   the mixture model to weight IBD by marker density.
-- `fasta` — reserved; read from config but not currently used by any rule.
+- `fasta`: reserved; read from the config but not used by any rule.
 
 ### Custom-panel files (`config/panels/<panel>/`)
 
@@ -194,14 +194,14 @@ snakemake --cores 16
 snakemake --cores 8 results/ibd_tot/tables/1.example_dataset.ibd_tot.tsv.gz
 ```
 
-The clustering and mixture-model steps need a lot of memory and CPU and declare
-`mem_mb` and `runtime` resources, so a cluster executor is usually needed. Pass a
-Snakemake profile or executor (for example `--workflow-profile <profile>` or
+Larger datasets may need more memory and CPU, and a cluster executor may then be
+needed. The rules declare `mem_mb` and `runtime` resources. Pass a Snakemake
+profile or executor (for example `--workflow-profile <profile>` or
 `--executor slurm`); no profile is included.
 
 `aggregation.max_concurrent_ibd_jobs` and
-`ibd_window_peaks.max_concurrent_coverage_jobs` limit the number of concurrent
-IO-heavy jobs.
+`ibd_window_peaks.max_concurrent_coverage_jobs` limit how many aggregation and
+coverage jobs run at the same time.
 
 ---
 
@@ -211,7 +211,7 @@ IO-heavy jobs.
    `{chrom}` wildcard) and `input_data.individuals` at your sample sheet.
 2. Set `ref.genome` (and `ref.chromosomes` / `ref.marker_file`) to your reference.
 3. Set `prefix` to your dataset name (it appears in every output filename).
-4. Optionally set `tmpdir` to a fast scratch location.
+4. Optionally set `tmpdir` to a scratch location for temporary files.
 5. Replace or remove the `example_panel` entry under `aggregation.panels`, and
    provide the corresponding `config/panels/<name>/` files (or rely solely on the
    default clustering panels).
@@ -226,8 +226,8 @@ above, which you can write by hand. Alternatively,
 builds `aggregate.tsv` and `color_map.tsv` together, so their `pop_id` sets stay
 identical, from two metadata tables:
 
-- `sample_info.tsv` — `sample_id, cluster_label, cluster_alias, cluster_assignment`
-- `cluster_info.tsv` — `cluster_label, cluster_alias, color, fill, shape`
+- `sample_info.tsv`: `sample_id, cluster_label, cluster_alias, cluster_assignment`
+- `cluster_info.tsv`: `cluster_label, cluster_alias, color, fill, shape`
 
 Run it against the shipped example metadata to regenerate `example_panel`:
 

@@ -95,7 +95,7 @@ How to read them:
   above zero), while selected sources were at 3 or more. That gap is what you look for.
 - Bayesian weights are sparse. A source with a tiny `p` and a tiny `se` is not a small
   contribution measured precisely; it is a source the sampler mostly switched off.
-- NNLS weights are often exactly 0 for many sources, so its `se` for those is
+- NNLS weights are exactly 0 for sources the fit does not need, so its `se` for those is
   uninformative. It is more useful to look at the sources with non-zero `p` and check that
   their jackknife `se` is small relative to `p`.
 - The two estimators can disagree when sources are similar to each other, because
@@ -124,7 +124,7 @@ Reading them:
   source can reproduce. This makes big, tightly related groups look badly fitted.
   `res_norm_ex_self` removes that row and is the figure to compare across targets.
 - `self_share` tells you how large that effect is for a given target. A high value with a
-  low `res_norm_ex_self` means the fit is good and the target is simply inbred.
+  low `res_norm_ex_self` means the fit is good and the target is inbred.
 - If `self_is_source` is true, the model can fit the own-cluster column, so
   `res_norm_ex_self` measures the fit away from home. It does not measure the part of
   the palette no source can reach, which is what it means otherwise.
@@ -156,13 +156,13 @@ Reading them:
   simplex corner, where the weight is near zero in every chain and the statistic
   becomes unstable without any real problem. It is `Inf` when chains are frozen at different
   values, which is a real failure (each chain stayed at its own starting solution).
-- **ESS.** `ess_min` is usually set by a near-zero source and is therefore pessimistic.
+- **ESS.** `ess_min` can be set by a near-zero source and is then pessimistic.
   Look at `ess_median` for the sources that matter, and at the sources with non-negligible
   `p`. As a general rule of thumb, a few hundred effective draws are enough for a stable
   posterior mean; this is a convention, not a threshold tuned for this pipeline.
 - **What to do about poor sampling.** More iterations (`mcmc_iter`), more chains, a longer
   burn-in, or fewer sources. Persistent disagreement between chains with a well-fitted
-  residual usually means several nearly equivalent source combinations.
+  residual can mean several nearly equivalent source combinations.
 - Convergence is separate from correctness. A well-converged chain can still describe a
   mis-specified model.
 
@@ -348,7 +348,7 @@ How to use it:
 | Weight rises with residual inside a stratum | `source_sink_by_stratum` | Source acting as a sink for drift | Add a closer source for that stratum, or drop the sink |
 | Deep source gets near-zero weight | Its palette against the targets | Gap too deep for IBD to convert into a proportion | Expect this beyond a few thousand years; use closer proxies and treat the deep member as a hypothesis |
 | `HIGH` in `target_R_flags` | `top_flagged_source` | Target relies on an extreme-R source | Report direction only |
-| Proportion changes a lot when a source is added or removed | Sum over related sources | Collinear alternatives | Report the summed component, not each member |
+| Proportion changes when a source is added or removed | Sum over related sources | Collinear alternatives | Report the summed component, not each member |
 
 ## Checklist for a run
 
