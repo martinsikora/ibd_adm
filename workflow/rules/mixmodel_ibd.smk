@@ -60,6 +60,7 @@ def mixmodel_extra_args(method):
             f" --mean_active_sources {MIX_MEAN_ACTIVE_SOURCES}"
             f" --active_eps {MIX_ACTIVE_EPS}"
             f" --hybrid_active_search {MIX_HYBRID_ACTIVE_SEARCH}"
+            f" --genome_length_cm {MIX_GENOME_LENGTH_CM}"
             f" --max_active_sources {MIX_MAX_ACTIVE_SOURCES}"
             f" --active_search_slots {MIX_ACTIVE_SEARCH_SLOTS}"
             f" --active_search_iter {MIX_ACTIVE_SEARCH_ITER}"

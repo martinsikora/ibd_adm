@@ -266,6 +266,7 @@ mixture:
   adapt_target_accept: 0.01
   local_move_prob: 1.0
   mean_active_sources: 6.0
+  genome_length_cm: 3500   # length of the genome covered by the IBD data (cM); sets the Bayesian posterior width
   active_eps: 1e-4
   hybrid_active_search: 1
   max_active_sources: 0

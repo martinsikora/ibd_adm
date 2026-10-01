@@ -695,6 +695,14 @@ parser$add_argument("--palette_scale",
   help = "raw: sources are mean per-individual palettes in cM, the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
 )
 
+parser$add_argument("--genome_length_cm",
+  action = "store",
+  dest = "genome_length_cm",
+  type = "double",
+  default = 3500,
+  help = "Bayesian: length of the genome covered by the IBD data in cM (about 3500 for human autosomes). It is the number of independent observations in the likelihood, as in SOURCEFIND where it is the total copying length, and sets the width of the posterior; <= 0 uses a fixed 20000 [default %(default)s]"
+)
+
 parser$add_argument("--max_active_sources",
   action = "store",
   dest = "max_active_sources",
@@ -803,6 +811,8 @@ parser$add_argument("--cv_out",
 )
 
 args <- parser$parse_args()
+## number of independent observations in the Bayesian likelihood
+n_copies_lik <- if (args$genome_length_cm > 0) args$genome_length_cm else 20000
 
 if (!(args$method %in% c("nnls", "bayesian"))) {
   stop("--method must be one of: nnls, bayesian")
@@ -1078,6 +1088,7 @@ cv_bayes_fit <- function(y, S) {
   infer_sourcefind(
     y = y,
     source_mat = S,
+    n_copies = n_copies_lik,
     n_iter = args$mcmc_iter,
     burnin = args$burnin,
     thin = args$thin,
@@ -1216,6 +1227,7 @@ if (args$method == "bayesian") {
     fit <- infer_sourcefind(
       y = ibd_pop_target[, x],
       source_mat = ibd_pop_source_fit,
+      n_copies = n_copies_lik,
       raw_scale = raw_scale,
       n_iter = args$mcmc_iter,
       burnin = args$burnin,

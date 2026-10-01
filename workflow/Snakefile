@@ -385,6 +385,7 @@ if MIX_PALETTE_SCALE not in ("raw", "normalized"):
     raise ValueError("mixture.palette_scale must be raw or normalized")
 if MIX_PALETTE_SCALE == "raw" and MIX_CV != "none":
     raise ValueError("mixture.cv needs mixture.palette_scale: normalized (chromosome hold-out is not implemented for the raw palette scale)")
+MIX_GENOME_LENGTH_CM = float(config.get("mixture", {}).get("genome_length_cm", 3500))
 MIX_MAX_ACTIVE_SOURCES = int(config.get("mixture", {}).get("max_active_sources", 0))
 MIX_ACTIVE_SEARCH_SLOTS = int(config.get("mixture", {}).get("active_search_slots", 200))
 MIX_ACTIVE_SEARCH_ITER = int(config.get("mixture", {}).get("active_search_iter", 1500))
