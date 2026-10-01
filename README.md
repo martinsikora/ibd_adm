@@ -1,34 +1,23 @@
-<h1 align="center">
+<h1>
   <img src="docs/assets/ibd_adm_logo.svg" alt="ibd_adm: ancestry from IBD sharing palettes" width="520">
 </h1>
 
-A Snakemake workflow for **IBD-based ancestry and admixture modelling**.
+`ibd_adm` is a method for genetic clustering and ancestry estimation using IBD-sharing profiles. Starting from precomputed pairwise IBD segments (one file per chromosome, for example from IBDseq or hap-IBD), it:
 
-`ibd_adm` is a *downstream* pipeline: it does **not** phase genotypes or call
-identity-by-descent (IBD) itself. It starts from **precomputed pairwise IBD
-segments** (one file per chromosome) plus a sample sheet, and turns them into
-
-- an artefact mask over regions of excess IBD coverage,
-- masked per-pair total IBD sharing,
-- a hierarchical clustering of individuals into populations,
-- population × population IBD-sharing profiles and a TVD (total variation
-  distance) matrix with an automatically derived colour scheme,
-- **admixture / mixture-model estimates** per target individual (NNLS and a
-  Bayesian MCMC estimator), with residual diagnostics,
-- PCA of the sharing profiles, and
-- (optionally) a genome-window scan for population-specific IBD peaks.
-
-IBD calling and phasing (e.g. IBDseq, hap-IBD, refined-IBD) happen **before**
-this workflow; `ibd_adm` consumes their segment output.
+- masks regions with excess IBD coverage and sums IBD per pair of individuals;
+- clusters individuals into populations;
+- computes IBD sharing profiles and a TVD (total variation distance) matrix between populations;
+- estimates ancestry proportions of target individuals from source populations (NNLS and Bayesian), with residual diagnostics;
+- runs PCA on the sharing profiles; and
+- optionally scans the genome for population-specific IBD peaks.
 
 ---
 
 ## Pipeline overview
 
-The workflow is assembled in [`workflow/Snakefile`](workflow/Snakefile) from
-seven rule modules under [`workflow/rules/`](workflow/rules). Each stage is a
-`config.yml` section and can be tuned or (for clustering / mixture / window
-peaks) switched off independently.
+[`workflow/Snakefile`](workflow/Snakefile) combines seven rule modules from
+[`workflow/rules/`](workflow/rules). Each stage has its own `config.yml` section;
+clustering, mixture and window peaks can be switched off.
 
 ```
 Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
@@ -60,13 +49,12 @@ Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
                            (disabled by default)
 ```
 
-Everything from stage 4 onward runs in **two parallel panel families**:
+From stage 4 on, everything runs for two kinds of panel:
 
-- **default** — the built-in hierarchical clustering, producing one panel per cut
-  height (e.g. `cluster_h0.75_...`, `cluster_h1.0_...`); and
-- **custom** — user-supplied panels listed under `aggregation.panels`, each with
-  its own population definitions and colours (the shipped example is
-  `example_panel`).
+- **default**: the built-in hierarchical clustering, one panel per cut height
+  (e.g. `cluster_h0.75_...`, `cluster_h1.0_...`);
+- **custom**: panels listed under `aggregation.panels`, each with its own
+  population definitions and colours (example: `example_panel`).
 
 ---
 
@@ -95,9 +83,8 @@ docs/
 results/                         # all outputs (generated; git-ignored)
 ```
 
-Files marked **[EXAMPLE]** are small synthetic placeholders that document the
-required schema. Replace them with your real data before running (see
-[Supplying real data](#supplying-real-data)).
+Files marked **[EXAMPLE]** are small synthetic placeholders showing the required
+format. Replace them with your data (see [Supplying real data](#supplying-real-data)).
 
 ---
 
@@ -169,10 +156,9 @@ results/
     ibd_window_peaks/{tables,plots}/ # (when enabled)
 ```
 
-`<panel>` is either a generated clustering panel (`cluster_h<height>_<tag>`) or a
-custom panel name. `<tag>` encodes the distance/transform/agglomeration choices
-(`d<dist>_n<transform>_m<clust>`), so changing those settings caches to a fresh
-directory rather than overwriting.
+`<panel>` is a generated clustering panel (`cluster_h<height>_<tag>`) or a custom
+panel name. `<tag>` encodes the distance, transform and agglomeration settings
+(`d<dist>_n<transform>_m<clust>`), so changing them writes to a new directory.
 
 ---
 
@@ -189,8 +175,7 @@ directory rather than overwriting.
   `lsei`, `Rtsne`, `ape`, `phytools`, `data.tree`, `igraph`, `tidygraph`,
   `ggraph`, `ggtree`, `heatmap3`.
 
-No conda environment is committed; install the above with your preferred manager
-(conda/mamba, `renv`, system packages, …).
+No environment file is provided; install the packages with conda, `renv` or system packages.
 
 ---
 
@@ -209,15 +194,14 @@ snakemake --cores 16
 snakemake --cores 8 results/ibd_tot/tables/1.example_dataset.ibd_tot.tsv.gz
 ```
 
-Several rules declare `mem_mb` and `runtime` resources (e.g. the clustering and
-mixture-model steps need a lot of memory and CPU). These imply a cluster
-executor. Supply a Snakemake **profile / SLURM executor** at invocation
-(e.g. `snakemake --workflow-profile <profile>` or `--executor slurm`). No profile
-is committed to this repo; provide one suited to your scheduler.
+The clustering and mixture-model steps need a lot of memory and CPU and declare
+`mem_mb` and `runtime` resources, so a cluster executor is usually needed. Pass a
+Snakemake profile or executor (for example `--workflow-profile <profile>` or
+`--executor slurm`); no profile is included.
 
-Two `config.yml` knobs throttle IO-heavy fan-out via Snakemake global resources:
 `aggregation.max_concurrent_ibd_jobs` and
-`ibd_window_peaks.max_concurrent_coverage_jobs`.
+`ibd_window_peaks.max_concurrent_coverage_jobs` limit the number of concurrent
+IO-heavy jobs.
 
 ---
 
@@ -258,25 +242,43 @@ Rscript workflow/scripts/r/build_example_panel.R \
 
 ## Mixture-model notes
 
-For each **target** sample, its IBD-sharing vector is modelled as a non-negative
-mixture over **source**-population profiles. Two estimators are available
+For each **target** sample, the IBD-sharing profile is modelled as a non-negative
+mixture of **source**-population profiles. Two estimators are available
 (`mixture.method`):
 
-- **`nnls`** — sum-to-one non-negative least squares (`lsei::pnnls`) with
-  per-chromosome block-jackknife standard errors.
-- **`bayesian`** — a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
-  proposal scaling, and an active-source search (spike-and-slab over the source
-  palette); reports acceptance rate, ESS, and R-hat. Judge convergence on `rhat_median`; `rhat_max` becomes large for near-zero sources.
+- **`nnls`**: non-negative least squares (`lsei::pnnls`) with per-chromosome
+  block-jackknife standard errors.
+- **`bayesian`**: a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
+  proposal scaling and an active-source search (spike-and-slab over the source
+  palette). It reports acceptance rate, ESS and R-hat; judge convergence on
+  `rhat_median`, as `rhat_max` becomes large for near-zero sources.
 
-Source populations can be listed explicitly (a `mixture_<set>.tsv` with
-`group == source`) or auto-selected from the TVD / neighbour-joining tree
-(`mixture_auto`), controlled by the `mixture.auto_source_*` knobs. A post-hoc
-**residual diagnostic** flags source populations that behave as poor proxies and
-names the unused population they are standing in for. It runs whenever `bayesian`
-is enabled; `source_flags.tsv` additionally needs `nnls`, because it reports the
-disagreement between the two estimators.
+`mixture.palette_scale` sets how the profiles are scaled. With `raw` (default) the
+sources are mean per-individual profiles in cM, the target is fitted up to a free
+scale and the weights are normalised afterwards. With `normalized` every profile is
+first divided by its total, which over-credits sources that carry more total IBD
+per individual (the behaviour of earlier versions).
 
-Each fit reports `res_norm_ex_self` (the residual excluding the target's own cluster), which is the statistic to compare across targets. Sources are also screened for an R scale offset (`source_R_flags.tsv`), with a per-target risk tier (`target_R_flags.tsv`). NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`). The output columns are described in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables), and how to interpret every diagnostic is in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
+Sources are listed in a `mixture_<set>.tsv` (`group == source`) or selected
+automatically from the TVD / neighbour-joining tree (`mixture_auto`, controlled by
+the `mixture.auto_source_*` knobs).
+
+Diagnostics:
+
+- A residual diagnostic flags source populations that act as poor proxies and names
+  the unused population they stand in for. It runs whenever `bayesian` is enabled;
+  `source_flags.tsv` also needs `nnls`, as it reports the disagreement between the
+  two estimators.
+- `res_norm_ex_self` is the residual excluding the target's own cluster, the
+  statistic to compare across targets.
+- Sources are screened for an R scale offset (`source_R_flags.tsv`), with a
+  per-target risk tier (`target_R_flags.tsv`).
+- NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`, only with
+  `palette_scale: normalized`).
+
+The output columns are described in
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables) and the
+interpretation of each diagnostic in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
 See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every knob.
 
