@@ -1,5 +1,5 @@
 <h1>
-  <img src="docs/assets/ibd_adm_logo.svg" alt="ibd_adm: ancestry from IBD sharing palettes" width="520">
+  <img src="docs/assets/ibd_adm_logo.svg" alt="ibd_adm: fine scale ancestry from IBD sharing palettes" width="520">
 </h1>
 
 `ibd_adm` is a method for genetic clustering and ancestry estimation using IBD-sharing profiles. Starting from precomputed pairwise IBD segments (one file per chromosome, for example from IBDseq or hap-IBD), it:

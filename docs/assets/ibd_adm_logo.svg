@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270" role="img" aria-label="ibd_adm: ancestry from IBD sharing palettes"><defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 270" width="800" height="270" role="img" aria-label="ibd_adm: fine scale ancestry from IBD sharing palettes">
+  <defs>
     <clipPath id="bar"><rect width="29.6" height="120" rx="4"/></clipPath>
   </defs>
   <rect width="800" height="270" rx="22" fill="#f4ece6"/>
@@ -23,5 +24,5 @@
   <g transform="translate(670.80,34)" clip-path="url(#bar)"><rect y="108.8" width="29.6" height="11.7" fill="#d9a65e"/><rect y="103.1" width="29.6" height="6.3" fill="#d98a6c"/><rect y="95.2" width="29.6" height="8.4" fill="#b8708a"/><rect y="77.0" width="29.6" height="18.7" fill="#8a6a9c"/><rect y="-0.0" width="29.6" height="77.5" fill="#5f77a8"/></g>
   <g transform="translate(704.40,34)" clip-path="url(#bar)"><rect y="110.9" width="29.6" height="9.6" fill="#d9a65e"/><rect y="106.3" width="29.6" height="5.1" fill="#d98a6c"/><rect y="99.9" width="29.6" height="6.9" fill="#b8708a"/><rect y="84.3" width="29.6" height="16.0" fill="#8a6a9c"/><rect y="-0.0" width="29.6" height="84.8" fill="#5f77a8"/></g>
   <text x="66" y="216" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="44" font-weight="700" fill="#3a2c3a">ibd<tspan fill="#d98a6c">_</tspan>adm</text>
-  <text x="66" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#8f8088">ancestry from IBD sharing palettes</text>
+  <text x="66" y="242" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#8f8088">fine scale ancestry from IBD sharing palettes</text>
 </svg>
