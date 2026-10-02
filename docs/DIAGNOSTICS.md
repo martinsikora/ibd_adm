@@ -101,6 +101,14 @@ How to read them:
 - The two estimators can disagree when sources are similar to each other, because
   collinear sources trade weight. Compare the sum over a group of related sources
   instead of each member. See [Collinear sources](#common-problems).
+- The Bayesian `se` of the default fit is too narrow. In simulations of two sources the
+  spread of the individual error was about 3.4 times the mean `se`, and the 95% interval
+  held the realized share for 46% of the individuals. With `mixture.two_stage_se: true`
+  (second fit with `mixture.genome_length_cm` observations) the ratio was 1.3 and the
+  coverage 88%; in scenarios with many close-relative candidates that `se` was wider than
+  the error. The weights are the same in both cases, which is why the genome-length fit
+  is used only for the `se`: used for the weights as well, its posterior mean moved weight
+  onto candidates that are not sources and toward the middle of the simplex.
 - The standard errors reflect sampling noise in the IBD, not error from a missing or
   mis-specified source.
 
