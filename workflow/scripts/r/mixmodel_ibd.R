@@ -521,11 +521,15 @@ infer_sourcefind <- function(
   p_sd <- rep(0, k)
   p_mean[selected_idx] <- p_mean_fit
   p_sd[selected_idx] <- p_sd_fit
+  p_med <- rep(0, k)
+  p_med[selected_idx] <- apply(pooled_samples, 2, median)
+  p_med <- p_med / sum(p_med)                     # posterior median per source, renormalised to sum to 1
   pred <- model_pred(source_mat, p_mean, raw_scale)
   res_norm <- sqrt(mean((pred - y)^2))
 
   list(
     p = p_mean,
+    p_median = p_med,
     se = p_sd,
     selected_idx = selected_idx,
     res_norm = res_norm,
@@ -1267,6 +1271,7 @@ if (args$method == "bayesian") {
       sample_id = x,
       source_pop = colnames(ibd_pop_source),
       p = fit$p,
+      p_median = fit$p_median,
       se = fit$se,
       res_norm = fit$res_norm,
       ## same quantity as res_norm here; carried so that res_norm_rmse means one
@@ -1457,7 +1462,7 @@ p_full <- p_full |>
     by = c("sample_id" = "sample_id")
   ) |>
   mutate(group = "target") |>
-  select(sample_id, label, pop_id, group, source_pop, p, se, res_norm, res_norm_rmse, res_norm_ex_self, self_share, self_is_source, accept_rate, accept_rate_min, accept_rate_max, ess_min, ess_median, rhat_max, rhat_median, active_sources_median, selected_sources_n, n_keep, n_chains, proposal_scale_final)
+  select(sample_id, label, pop_id, group, source_pop, p, any_of("p_median"), se, res_norm, res_norm_rmse, res_norm_ex_self, self_share, self_is_source, accept_rate, accept_rate_min, accept_rate_max, ess_min, ess_median, rhat_max, rhat_median, active_sources_median, selected_sources_n, n_keep, n_chains, proposal_scale_final)
 
 p_source <- group_map |>
   filter(
