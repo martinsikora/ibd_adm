@@ -190,7 +190,8 @@ Compare models on the same folds, as a paired per-target difference in `ll_test`
 | `mixture.adapt_target_accept` | `0.01` | fraction | Target acceptance rate for adaptation. |
 | `mixture.local_move_prob` | `1.0` | prob | Probability of a local (vs global) move. |
 | `mixture.mean_active_sources` | `6.0` | number | Prior mean number of active sources. |
-| `mixture.genome_length_cm` | `3500` | number | Bayesian: length of the genome covered by the IBD data in cM (about 3500 for human autosomes; set it for other species or partial genomes). It is the number of independent observations in the likelihood, so it sets the width of the posterior and the `se`. `0` uses the fixed 20000 of earlier runs. |
+| `mixture.two_stage_se` | `false` | bool | Bayesian two-stage SE. `false`: `se` is the posterior SD of the single fit, whose likelihood has a fixed 20000 observations; it is too narrow (about 3 times in simulations). `true`: a second fit on the same sources, with `mixture.genome_length_cm` observations, gives the `se`; the weights stay those of the fixed fit. Doubles the Bayesian run time. |
+| `mixture.genome_length_cm` | `3500` | number | Length of the genome covered by the IBD data in cM (about 3500 for human autosomes; set it for other species or partial genomes). Used only when `mixture.two_stage_se` is true; it is the number of trials of the likelihood behind the SE, as in SOURCEFIND. |
 | `mixture.palette_scale` | `raw` | `raw`, `normalized` | How palettes are scaled before fitting; see the palette scale section of DIAGNOSTICS.md. `normalized` reproduces earlier runs. `raw` does not support `mixture.cv`. |
 | `mixture.active_eps` | `1e-4` | number | Threshold below which a source counts as inactive. |
 | `mixture.hybrid_active_search` | `1` | 0/1 | Toggle the hybrid active-source search. |

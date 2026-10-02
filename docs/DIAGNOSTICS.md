@@ -83,7 +83,7 @@ to reproduce them. `raw` does not support `--cv`, and the workflow stops with a 
 | column | meaning |
 |---|---|
 | `p` | Weight of the source in the target. Sums to 1 over the sources of a target. |
-| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation; its width follows `mixture.genome_length_cm`. In simulations it is still about 1.3 times narrower than the error between individuals, so treat it as approximate. |
+| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is about 3 times narrower than the error between individuals in simulations. With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior (about 1.3 times too narrow in simulations) and the weights are unchanged. In scenarios with many close-relative candidate sources that wide posterior, used for the weights as well, shifted them toward the middle of the simplex, which is why only the SE is taken from it. |
 | `active_sources_median` | Bayesian: median number of sources with weight above `mixture.active_eps` (default 1e-4) per posterior draw. |
 | `selected_sources_n` | Bayesian: number of sources passed to the continuous sampler after the active-source search. Equal to all sources when the search is off or `max_active_sources` covers them all. |
 

@@ -345,8 +345,20 @@ infer_sourcefind <- function(
     active_search_iter = 1500,
     active_search_burnin = 500,
     active_search_thin = 10,
-    active_search_jump_prob = 0.1
+    active_search_jump_prob = 0.1,
+    se_n_copies = 0,
+    selected_idx_override = NULL
 ) {
+  ## two-stage fit: the weights come from the fit with n_copies observations, the SE from a second fit on the same
+  ## sources with se_n_copies observations (a posterior whose width is calibrated; see docs/DIAGNOSTICS.md)
+  if (se_n_copies > 0 && se_n_copies != n_copies) {
+    call_args <- as.list(environment())
+    fit_p <- do.call(infer_sourcefind, modifyList(call_args, list(se_n_copies = 0)))
+    fit_se <- do.call(infer_sourcefind, modifyList(call_args, list(se_n_copies = 0, n_copies = se_n_copies,
+                                                                   selected_idx_override = fit_p$selected_idx)))
+    fit_p$se <- fit_se$se
+    return(fit_p)
+  }
   k <- ncol(source_mat)
   max_active_sources <- as.integer(max_active_sources)
   hybrid_active_search <- as.logical(hybrid_active_search)
@@ -362,7 +374,9 @@ infer_sourcefind <- function(
   }
 
   selected_idx <- seq_len(k)
-  if (hybrid_active_search && max_active_sources < k) {
+  if (!is.null(selected_idx_override)) {
+    selected_idx <- selected_idx_override
+  } else if (hybrid_active_search && max_active_sources < k) {
     expected_active <- ifelse(mean_active_sources > 0, mean_active_sources, max_active_sources / 2)
     selected_idx <- select_active_sources_slots(
       y = y,
@@ -513,6 +527,7 @@ infer_sourcefind <- function(
   list(
     p = p_mean,
     se = p_sd,
+    selected_idx = selected_idx,
     res_norm = res_norm,
     accept_rate = mean(chain_accept),
     accept_rate_min = min(chain_accept),
@@ -695,12 +710,12 @@ parser$add_argument("--palette_scale",
   help = "raw: sources are mean per-individual palettes in cM, the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
 )
 
-parser$add_argument("--genome_length_cm",
+parser$add_argument("--se_genome_length_cm",
   action = "store",
-  dest = "genome_length_cm",
+  dest = "se_genome_length_cm",
   type = "double",
-  default = 3500,
-  help = "Bayesian: length of the genome covered by the IBD data in cM (about 3500 for human autosomes). It is the number of independent observations in the likelihood, as in SOURCEFIND where it is the total copying length, and sets the width of the posterior; <= 0 uses a fixed 20000 [default %(default)s]"
+  default = 0,
+  help = "Bayesian: if > 0, fit a second time on the same sources with this many observations in the likelihood and report its posterior SD as se (the weights stay those of the fixed 20000 fit). Set it to the length of the genome covered by the IBD data in cM (about 3500 for human autosomes), the number of trials in the SOURCEFIND likelihood. 0 reports the SD of the single fit [default %(default)s]"
 )
 
 parser$add_argument("--max_active_sources",
@@ -812,7 +827,7 @@ parser$add_argument("--cv_out",
 
 args <- parser$parse_args()
 ## number of independent observations in the Bayesian likelihood
-n_copies_lik <- if (args$genome_length_cm > 0) args$genome_length_cm else 20000
+if (args$se_genome_length_cm < 0) stop("--se_genome_length_cm must be >= 0")
 
 if (!(args$method %in% c("nnls", "bayesian"))) {
   stop("--method must be one of: nnls, bayesian")
@@ -1088,7 +1103,6 @@ cv_bayes_fit <- function(y, S) {
   infer_sourcefind(
     y = y,
     source_mat = S,
-    n_copies = n_copies_lik,
     n_iter = args$mcmc_iter,
     burnin = args$burnin,
     thin = args$thin,
@@ -1227,7 +1241,7 @@ if (args$method == "bayesian") {
     fit <- infer_sourcefind(
       y = ibd_pop_target[, x],
       source_mat = ibd_pop_source_fit,
-      n_copies = n_copies_lik,
+      se_n_copies = args$se_genome_length_cm,
       raw_scale = raw_scale,
       n_iter = args$mcmc_iter,
       burnin = args$burnin,

@@ -266,7 +266,10 @@ mixture:
   adapt_target_accept: 0.01
   local_move_prob: 1.0
   mean_active_sources: 6.0
-  genome_length_cm: 3500   # length of the genome covered by the IBD data (cM); sets the Bayesian posterior width
+  ## Bayesian standard errors. false: se is the posterior SD of the single fit (fixed 20000 observations), too narrow.
+  ## true: a second fit on the same sources, with genome_length_cm observations, gives the se (weights unchanged; doubles the Bayesian run time)
+  two_stage_se: false
+  genome_length_cm: 3500   # length of the genome covered by the IBD data in cM, used when two_stage_se is true (about 3500 for human autosomes)
   active_eps: 1e-4
   hybrid_active_search: 1
   max_active_sources: 0
