@@ -13,7 +13,7 @@ prefix: example_dataset
 
 # Optional scratch directory. When set, every shell command runs with
 # TMPDIR exported here (created if missing). Comment out to use the system TMPDIR.
-tmpdir: /path/to/scratch/ibd_adm
+tmpdir: tmp
 
 ref:
   # Reference FASTA. Reserved: read into the config but not used by any rule;
@@ -21,7 +21,7 @@ ref:
   fasta: /path/to/reference/genome.fa
   # Chromosome-length file (2 cols: chrom, length) used by `bedtools genomecov`
   # during masking. Must cover every chromosome in `chromosomes` below.
-  genome: /path/to/reference/genome.genome
+  genome: config/genome.txt
   # Plain list of chromosomes to process, one per line (autosomes by default).
   chromosomes: config/chromosomes.txt
   # Per-chromosome marker counts (cols: chrom, n); used by the mixture model to
@@ -32,7 +32,7 @@ input_data:
   # Per-chromosome precomputed IBDseq segments. The {chrom} wildcard is filled
   # from `ref.chromosomes`. Whitespace/TSV columns consumed downstream:
   #   $1,$2 = sample ids, $3 = chrom, $4,$5 = start,end (bp), $6 = LOD, $9 = length (cM)
-  ibd: resources/ibd_segments/{chrom}.example_dataset.ibdseq.ibd.gz
+  ibd: example/ibd_segments/{chrom}.example_dataset.ibdseq.ibd.gz
   # Sample sheet (cols: sample_id, label, group). group is one of
   # cluster_full (used to build clusters), cluster_min_dist (assigned by k-NN),
   # or exclude (dropped from aggregation).
@@ -91,7 +91,7 @@ clustering:
   # Higher k prevents an isolated low-sharing cluster + one mis-placed bridge
   # sample from turning into a diverse "sink".
   knn: 7
-  threads: 32
+  threads: 8
   # base_height / gate_height define the ONE default clustering panel; both are
   # REQUIRED whenever clustering.enabled is true (the workflow raises an error
   # at load time otherwise). Equal values -> a plain cut at that height, no
@@ -118,8 +118,8 @@ clustering:
   # the header of workflow/scripts/r/cluster_cut_gated.R for the benchmark and
   # the alternatives that scored worse. min_sharing is unused when
   # gate_height == base_height.
-  base_height: 0.75
-  gate_height: 0.75
+  base_height: 0.5
+  gate_height: 0.2
   min_sharing: 250000
 
 aggregation:
@@ -178,12 +178,12 @@ aggregation:
     min_l_cm: 1
     max_l_cm: 16
     min_lod: 3
-  panels:
+  panels: []
     # Custom aggregation panels. Each name must be a directory under
     # config/panels/<name>/ providing aggregate.tsv (+ optional color_map.tsv and
     # mixture_<set>.tsv). The example panel here is built by
     # workflow/scripts/r/build_example_panel.R (or written by hand).
-    - example_panel
+    # (none in this example: the sources and targets are given in config/panels/default/mixture_four_pop.tsv)
 
 mixture:
   enabled: true
@@ -193,7 +193,7 @@ mixture:
   cv: none
   # future multisession workers per run_models job; models parallelize across
   # target samples (one target/chain is single-threaded)
-  threads: 48
+  threads: 8
   auto_k_min: 15
   auto_k_max: 20
   # source picker: tree_spread | farthest | cluster_medoids | differentiated |

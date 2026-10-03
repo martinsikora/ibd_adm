@@ -1,0 +1,22 @@
+# Four-population example: outgroup O, sources S1 and S2 (split 60 generations ago), and X, formed 12 generations ago
+# from S1 (0.6) and S2 (0.40) with size 400 since then. O splits from the S1/S2 ancestor 120 generations ago.
+name: example_four_pop
+prefix: example_dataset
+seed: 20264001
+genome:
+  lengths_bp: [249000000, 242000000, 198000000, 190000000, 182000000, 171000000, 159000000, 145000000, 138000000, 134000000, 135000000, 133000000, 114000000, 107000000, 102000000, 90300000, 83300000, 80400000, 58600000, 64400000, 46700000, 50800000]
+  recomb_rate: 1.0e-08
+  marker_spacing_bp: 10000
+ibd: {min_cm: 1.0}
+ancestry: {dtwf_generations: 40}
+populations:
+- {name: O, ne: 2000, n_samples: 12, group: cluster_full}
+- {name: S1, ne: 2000, n_samples: 12, group: cluster_full}
+- {name: S2, ne: 2000, n_samples: 12, group: cluster_full}
+- {name: X, ne: 400, n_samples: 12, group: cluster_full}
+- {name: S12, ne: 4000}
+- {name: ROOT, ne: 4000}
+events:
+- {type: split, derived: [S1, S2], ancestral: S12, time: 60}
+- {type: split, derived: [S12, O], ancestral: ROOT, time: 120}
+- {type: admixture, derived: X, ancestral: [S1, S2], proportions: [0.6, 0.4000], time: 12}
