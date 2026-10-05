@@ -380,7 +380,7 @@ MIX_LOCAL_MOVE_PROB = float(config.get("mixture", {}).get("local_move_prob", 1.0
 MIX_MEAN_ACTIVE_SOURCES = float(config.get("mixture", {}).get("mean_active_sources", 6.0))
 MIX_ACTIVE_EPS = float(config.get("mixture", {}).get("active_eps", 1e-4))
 MIX_HYBRID_ACTIVE_SEARCH = int(config.get("mixture", {}).get("hybrid_active_search", 1))
-MIX_PALETTE_SCALE = str(config.get("mixture", {}).get("palette_scale", "raw"))
+MIX_PALETTE_SCALE = str(config.get("mixture", {}).get("palette_scale", "normalized"))
 if MIX_PALETTE_SCALE not in ("raw", "normalized"):
     raise ValueError("mixture.palette_scale must be raw or normalized")
 if MIX_PALETTE_SCALE == "raw" and MIX_CV != "none":

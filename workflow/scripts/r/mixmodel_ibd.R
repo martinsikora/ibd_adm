@@ -710,8 +710,8 @@ parser$add_argument("--palette_scale",
   action = "store",
   dest = "palette_scale",
   type = "character",
-  default = "raw",
-  help = "raw: sources are mean per-individual palettes in cM, the target palette is fitted up to a free scale and the weights are normalised afterwards. normalized: every palette sums to 1, which over-credits sources that carry more total IBD per individual [default %(default)s]"
+  default = "normalized",
+  help = "normalized: every palette sums to 1, so a source is weighted by its ancestry share times its total IBD per individual. raw: sources are mean per-individual palettes in cM, the target palette is fitted up to a free scale and the weights are normalised afterwards; it removes that dependence on total IBD, but a source whose palette is far smaller than the others (a single low-sharing genome) can take any weight, so do not use it with such sources [default %(default)s]"
 )
 
 parser$add_argument("--se_genome_length_cm",

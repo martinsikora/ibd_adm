@@ -253,11 +253,13 @@ mixture of **source**-population profiles. Two estimators are available
   palette). It reports acceptance rate, ESS and R-hat; judge convergence on
   `rhat_median`, as `rhat_max` becomes large for near-zero sources.
 
-`mixture.palette_scale` sets how the profiles are scaled. With `raw` (default) the
-sources are mean per-individual profiles in cM, the target is fitted up to a free
-scale and the weights are normalised afterwards. With `normalized` every profile is
-first divided by its total, which over-credits sources that carry more total IBD
-per individual (the behaviour of earlier versions).
+`mixture.palette_scale` sets how the profiles are scaled. With `normalized` (default)
+every profile is first divided by its total, which over-credits sources that carry
+more total IBD per individual. With `raw` the sources are mean per-individual profiles
+in cM, the target is fitted up to a free scale and the weights are normalised
+afterwards; use it to re-estimate proportions when the sources differ strongly in
+total IBD, and only with sources of comparable total sharing (a single low-sharing
+source can take any weight, see [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md#palette-scale)).
 
 Sources are listed in a `mixture_<set>.tsv` (`group == source`) or selected
 automatically from the TVD / neighbour-joining tree (`mixture_auto`, controlled by

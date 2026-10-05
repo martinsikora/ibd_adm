@@ -16,9 +16,9 @@ Every individual has a palette: the total IBD (cM) it shares with each donor pop
 For a target, the model finds non-negative weights `p` that sum to 1 so that the weighted
 sum of the source palettes reproduces the target palette. How the palettes are scaled is
 set by `mixture.palette_scale` (see [Palette scale](#palette-scale)): with the default
-`raw`, the source palettes are mean per-individual palettes in cM and the target palette
-is fitted up to a free overall scale; with `normalized`, every palette is first divided
-by its own total. Two estimators are available:
+`normalized`, every palette is first divided by its own total; with `raw`, the source
+palettes are mean per-individual palettes in cM and the target palette is fitted up to a
+free overall scale. Two estimators are available:
 
 - `nnls`: sum-to-one non-negative least squares. One point estimate per target, with a
   jackknife standard error.
@@ -28,14 +28,14 @@ by its own total. Two estimators are available:
 
 Two things follow from this and matter for every number below.
 
-1. With `palette_scale: normalized`, `p` is a share of **IBD**, not of the genome. A source
-   that emits more IBD into the panel per unit of ancestry (a higher R, see
-   [Source R flags](#source-r-flags)) gets more weight than its ancestry alone justifies,
-   and the reverse for a low-R source. With the default `raw` this dependence on the
-   total IBD of the sources is removed, but not every offset is: a source that is only a
-   relative of the true source still shares less IBD with the target than with itself.
-   Compare `p` between targets fitted with the same sources, and be careful comparing it
-   across sources.
+1. With `palette_scale: normalized` (the default), `p` is a share of **IBD**, not of the
+   genome. A source that emits more IBD into the panel per unit of ancestry (a higher R,
+   see [Source R flags](#source-r-flags)) gets more weight than its ancestry alone
+   justifies, and the reverse for a low-R source. This is a known bias; read the weights
+   with it in mind. `palette_scale: raw` removes the dependence on the total IBD of the
+   sources, but not every offset: a source that is only a relative of the true source
+   still shares less IBD with the target than with itself. Compare `p` between targets
+   fitted with the same sources, and be careful comparing it across sources.
 2. A palette can only be reproduced from the sources you supply. If an ancestry is
    missing from the source set, its signal is absorbed by the nearest available source.
    Most of the diagnostics below exist to make that visible.
@@ -56,27 +56,40 @@ Which file holds what:
 
 `mixture.palette_scale` (command line `--palette_scale`) has two settings.
 
-- `raw` (default): each source is the mean per-individual palette of its source
-  individuals, in cM. No donor-count correction is applied: the aggregation sums every
-  individual's within-cluster entry over the n - 1 other cluster members and its
-  between-cluster entries over a random subset of n - 1 of the n donors, so source
-  individuals and targets are compared on the same number of donors. The target palette
-  is fitted up to a free overall scale and the weights are normalised afterwards, so they
-  are ancestry fractions. In the Bayesian model the prediction is rescaled to sum to 1
-  before the likelihood.
-- `normalized`: every palette is divided by its own total before fitting, which was the
-  only behaviour before this option existed. A mixture of normalised palettes weights a
-  source by its ancestry share times its total IBD per individual, so a source that
-  carries more total IBD is over-credited. The size of this effect depends on the ratio
-  of the total IBD of the sources over the donor panel, and changes with the donor set.
+- `normalized` (default): every palette is divided by its own total before fitting. A
+  mixture of normalised palettes weights a source by its ancestry share times its total
+  IBD per individual, so a source that carries more total IBD is over-credited. The size
+  of this effect depends on the ratio of the total IBD of the sources over the donor
+  panel, and changes with the donor set. Report it as a possible bias of the weights.
+- `raw`: each source is the mean per-individual palette of its source individuals, in cM.
+  No donor-count correction is applied: the aggregation sums every individual's
+  within-cluster entry over the n - 1 other cluster members and its between-cluster
+  entries over a random subset of n - 1 of the n donors, so source individuals and
+  targets are compared on the same number of donors. The target palette is fitted up to a
+  free overall scale and the weights are normalised afterwards, so they are ancestry
+  fractions. In the Bayesian model the prediction is rescaled to sum to 1 before the
+  likelihood. `raw` does not support `--cv`, and the workflow stops with a message if
+  `mixture.cv` is set together with it.
 
 In simulations with known ancestry (two sources, one admixed target, 22 chromosomes) the
 `normalized` fit overestimated the share of the source with more total IBD by 0.03 to 0.04
 at mixed targets, and `raw` changed this to a small bias of 0.01 to 0.02 in the other
 direction, from sources that are relatives of the true sources and not the sources
-themselves. Results from earlier runs used `normalized`; set `palette_scale: normalized`
-to reproduce them. `raw` does not support `--cv`, and the workflow stops with a message if
-`mixture.cv` is set together with it.
+themselves.
+
+**Use `raw` only with sources of comparable total sharing.** Because the scale is free, a
+source whose palette is far smaller than the others (a single genome with little IBD
+detected, with a total below about 1% of the panel median) adds almost nothing to the
+fitted palette whatever weight it gets, so the fit cannot determine that weight and it
+absorbs mass. In a test on 19,497 targets with three such sources (single individuals with
+total palettes of 589, 1563 and 2160 cM against a median of 234,000 cM), `raw` gave
+Ethiopia_Neolithic a mean weight of 0.6 in East Africans (24% of individuals above 0.9),
+removed most of the Eurasian ancestry in African groups (East Africa 0.48 to 0.04, Southern
+Africa 0.11 to 0.003), and gave it 0.17 on average to European farmers with no change in
+the fit residual. NNLS with these sources moved most Micronesians and Melanesians onto it.
+Check the total palette of each source (mean cM per individual) before using `raw`, and
+leave out single, low-sharing sources. Flooring the palette totals or bounding the scale
+did not remove the problem in these tests.
 
 ## Estimates and uncertainty
 

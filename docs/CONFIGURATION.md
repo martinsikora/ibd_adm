@@ -192,7 +192,7 @@ Compare models on the same folds, as a paired per-target difference in `ll_test`
 | `mixture.mean_active_sources` | `6.0` | number | Prior mean number of active sources. |
 | `mixture.two_stage_se` | `false` | bool | Bayesian two-stage SE. `false`: `se` is the posterior SD of the single fit, whose likelihood has a fixed 20000 observations; it is too narrow (about 3 times in simulations). `true`: a second fit on the same sources, with `mixture.genome_length_cm` observations, gives the `se`; the weights stay those of the fixed fit. Doubles the Bayesian run time. |
 | `mixture.genome_length_cm` | `3500` | number | Length of the genome covered by the IBD data in cM (about 3500 for human autosomes; set it for other species or partial genomes). Used only when `mixture.two_stage_se` is true; it is the number of trials of the likelihood behind the SE, as in SOURCEFIND. |
-| `mixture.palette_scale` | `raw` | `raw`, `normalized` | How palettes are scaled before fitting; see the palette scale section of DIAGNOSTICS.md. `normalized` reproduces earlier runs. `raw` does not support `mixture.cv`. |
+| `mixture.palette_scale` | `normalized` | `normalized`, `raw` | How palettes are scaled before fitting; see the palette scale section of DIAGNOSTICS.md. `raw` is for re-estimating proportions when the sources differ strongly in total IBD, and is not suitable with single, low-sharing sources. `raw` does not support `mixture.cv`. |
 | `mixture.active_eps` | `1e-4` | number | Threshold below which a source counts as inactive. |
 | `mixture.hybrid_active_search` | `1` | 0/1 | Toggle the hybrid active-source search. |
 | `mixture.max_active_sources` | `0` | int | Cap on simultaneously active sources (`0` = unlimited). |
