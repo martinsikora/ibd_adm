@@ -85,7 +85,7 @@ Stage 4 (`aggregate_ibd.smk`): per-population IBD sharing + TVD + colour map.
 | `aggregation.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `aggregation.ibd_params.min_lod` | `3` | number | Min LOD/score. |
 | `aggregation.full_cluster_pop_overrides` | `{}` | mapping: panel name → options | Per-panel overrides, keyed by a custom panel's directory name under `config/panels/` or by `default` for the raw clustering panel. A panel that is not listed gets none. Do not set this globally, because a pop_id can mean different things in different panels. Options are listed below the table. |
-| `aggregation.panels` | `[example_panel]` | list of names | Custom panels; each must be a `config/panels/<name>/` directory. Drives custom aggregation, mixture, PCA, and peaks. Omit/empty to use only the default clustering panels. |
+| `aggregation.panels` | `[]` | list of names | Custom panels; each must be a `config/panels/<name>/` directory. Drives custom aggregation, mixture, PCA, and peaks. Omit/empty to use only the default clustering panels. |
 
 Options of `aggregation.full_cluster_pop_overrides` (per panel):
 

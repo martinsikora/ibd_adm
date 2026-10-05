@@ -42,15 +42,21 @@ Mean estimated shares for the X individuals (`expected/mixture_four_pop_summary.
 
 | method | S1 | S2 | realized |
 |---|---|---|---|
-| Bayesian | 0.663 | 0.337 | 0.604 / 0.396 |
-| NNLS | 0.575 | 0.424 | 0.604 / 0.396 |
+| Bayesian | 0.696 | 0.304 | 0.604 / 0.396 |
+| NNLS | 0.617 | 0.383 | 0.604 / 0.396 |
 
-The outgroup gets about 0. Individual estimates vary by about 0.03-0.04 around these means. Small differences from
-these numbers are expected from the MCMC seed.
+The outgroup gets 0. Individual estimates vary by about 0.03 around these means. The seeds are fixed in
+`config/config.yml` (`aggregation.seed`, `mixture.seed`), so a rerun should give the same numbers; small differences
+can come from the software versions.
+
+With the default normalized palettes the Bayesian estimate is 0.09 above the realized S1 share and NNLS 0.01. Normalized
+palettes weight a source by its ancestry share times its total IBD per individual (see
+[docs/DIAGNOSTICS.md](../docs/DIAGNOSTICS.md#palette-scale)). The offset is that known bias. Set `mixture.palette_scale: raw` to compare.
 
 ## About the `auto` panel
 
-The automatic source picker is a convenience, not a guarantee. On this dataset it picks the outgroup and one
-S2 cluster, and X then comes out as almost entirely that S2 source. The picker takes one source per top-level clade
-and cannot tell that a small, drifted admixed population should be a target. For a real analysis, check the picked
-sources, and prefer a hand-written mixture file like `four_pop` when you know your sources.
+The automatic source picker is a convenience, not a guarantee. On this dataset it picks the outgroup, one S2 cluster and
+one X cluster as sources, so X is not a target in the `auto` panel (the other individuals of X are fitted against the
+sources it chose, and X itself gets no estimate). The picker takes one source per top-level clade and cannot tell that a
+small, drifted admixed population should be a target. For a real analysis, check the picked sources, and prefer a
+hand-written mixture file like `four_pop` when you know your sources.

@@ -54,7 +54,25 @@ From stage 4 on, everything runs for two kinds of panel:
 - **default**: the built-in hierarchical clustering, one panel per cut height
   (e.g. `cluster_h0.75_...`, `cluster_h1.0_...`);
 - **custom**: panels listed under `aggregation.panels`, each with its own
-  population definitions and colours (example: `example_panel`).
+  population definitions and colours (see [Building a custom panel](#building-a-custom-panel)).
+
+---
+
+## Example
+
+[`example/`](example) holds a small simulated dataset: 48 individuals on 22 human-sized chromosomes (2.2 MB of IBD
+segments), made of an outgroup `O`, two sources `S1` and `S2`, and an admixed population `X` formed 12 generations ago
+from 60% `S1` and 40% `S2`. `config/` already points at it, so the whole workflow runs unchanged:
+
+```bash
+snakemake --cores 8        # a few minutes; seeds are fixed in config/config.yml
+```
+
+It clusters the 48 individuals into ten clusters (X forms its own two), fits the sources and targets named in
+`config/panels/default/mixture_four_pop.tsv`, and runs the automatic source selection. The Bayesian fit gives X 0.70
+from `S1` and the NNLS fit 0.62, against 0.60 realized; the table of expected results, the clusters and the true
+ancestry of every individual are in [`example/expected/`](example/expected). [`example/README.md`](example/README.md)
+describes the data, the expected output and why the automatic source picker does not model X here.
 
 ---
 
@@ -65,26 +83,31 @@ config/
   config.yml                     # all workflow parameters (see docs/CONFIGURATION.md)
   chromosomes.txt                # chromosomes to process, one per line
   n_markers.tsv                  # per-chromosome marker counts (chrom, n)
+  genome.txt                     # chromosome lengths (chrom, bp)
   individuals.tsv                # sample sheet (sample_id, label, group)   [EXAMPLE]
-  metadata/                      # inputs for build_example_panel.R          [EXAMPLE]
+  panels/
+    default/
+      mixture_four_pop.tsv       # sources and targets for the default clustering panel   [EXAMPLE]
+  metadata/                      # input format of build_example_panel.R   [EXAMPLE]
     sample_info.tsv
     cluster_info.tsv
-  panels/
-    example_panel/               # a custom panel                            [EXAMPLE]
-      aggregate.tsv              #   sample_id, pop_id, group
-      color_map.tsv             #   pop_id, color, fill, shape
-      mixture_example.tsv       #   sample_id, group (target|source)
+example/                         # the example dataset (see above)         [EXAMPLE]
+  ibd_segments/                  #   one IBD segment file per chromosome
+  simulation/scenario.yaml       #   how it was simulated
+  expected/                      #   clusters, realized ancestry, expected results
+  README.md
 workflow/
   Snakefile
   rules/*.smk                    # the 7 pipeline stages
   scripts/{python,r,awk}/        # step implementations
 docs/
   CONFIGURATION.md               # full per-knob reference
+  DIAGNOSTICS.md                 # how to read the estimates and diagnostics
 results/                         # all outputs (generated; git-ignored)
 ```
 
-Files marked **[EXAMPLE]** are small synthetic placeholders showing the required
-format. Replace them with your data (see [Supplying real data](#supplying-real-data)).
+Files marked **[EXAMPLE]** belong to the example dataset or show the required format.
+Replace them with your data (see [Supplying real data](#supplying-real-data)).
 
 ---
 
@@ -212,9 +235,13 @@ coverage jobs run at the same time.
 2. Set `ref.genome` (and `ref.chromosomes` / `ref.marker_file`) to your reference.
 3. Set `prefix` to your dataset name (it appears in every output filename).
 4. Optionally set `tmpdir` to a scratch location for temporary files.
-5. Replace or remove the `example_panel` entry under `aggregation.panels`, and
-   provide the corresponding `config/panels/<name>/` files (or rely solely on the
-   default clustering panels).
+5. Delete `config/panels/default/mixture_four_pop.tsv` (it names the example's
+   individuals) and write your own `mixture_<set>.tsv` there, or rely on the
+   automatic source selection. List any custom panels under `aggregation.panels`
+   (empty in the example) and provide the corresponding `config/panels/<name>/` files.
+6. Set the clustering cut (`clustering.base_height` and `gate_height`; the example uses
+   0.5 gated to 0.2) and the masking length cutoff (`masking.ibd_params.min_l_cm`) for
+   your data.
 
 ---
 
@@ -229,13 +256,13 @@ identical, from two metadata tables:
 - `sample_info.tsv`: `sample_id, cluster_label, cluster_alias, cluster_assignment`
 - `cluster_info.tsv`: `cluster_label, cluster_alias, color, fill, shape`
 
-Run it against the shipped example metadata to regenerate `example_panel`:
+`config/metadata/` holds placeholder files in this format. Run it on your own tables:
 
 ```bash
 Rscript workflow/scripts/r/build_example_panel.R \
   --sample_info  config/metadata/sample_info.tsv \
   --cluster_info config/metadata/cluster_info.tsv \
-  --out_dir      config/panels/example_panel
+  --out_dir      config/panels/my_panel
 ```
 
 ---
