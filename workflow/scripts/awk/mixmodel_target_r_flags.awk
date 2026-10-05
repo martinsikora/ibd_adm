@@ -11,9 +11,24 @@
 # proportion, and no per-source correction was found that generalises across cohorts.
 # Raw p is reported alongside for reference.
 #
+# With -v PSCALE=raw (mixture.palette_scale: raw) p is already free of R, so it is not divided
+# by R again (q = p). Only sources whose R is EMPTY (default 100) times below the panel median or more are then flagged (SEVERE):
+# with a free scale a source with an almost empty palette adds almost nothing to the fitted
+# palette whatever its weight, so its weight is not determined by the data and can take
+# mass from other sources. High-R sources are not offset-prone under raw.
+#
+# Fit gate (columns res_ratio and poor_fit). res_ratio is the target's res_norm_ex_self divided by the median over the
+# targets in the table, poor_fit is "yes" at GATE (default 3) or more. Under raw palettes a weight on an almost empty
+# source is a real contribution when the target is well fitted, and a sink for misfit (ancestry that no source
+# carries) when it is not: in palette simulations the fit residual separated the two cases cleanly (relative residual
+# 0.03 to 0.04 against 0.4 to 0.75), but on world_base_2 it separates them only partly (AUC 0.8 for a weight above
+# 0.5 on the sink source, 4% of targets at 3 times the median). With PSCALE=raw a HIGH tier therefore needs
+# poor_fit = yes; a target that would be HIGH with a good fit is MODERATE (the weight is probably real but cannot
+# be verified from the shape). The normalized tiers are not changed by the gate.
+#
 # Usage:
-#   gawk -v fQC=<source_R_flags.tsv> [-v PMIN=0.002] [-v HIGH=0.02] [-v MODERATE=0.05] \
-#        [-v LOW=0.01] -f mixmodel_target_r_flags.awk <source_R_flags.tsv> <mixmodel_*.tsv>
+#   gawk -v fQC=<source_R_flags.tsv> [-v PSCALE=normalized|raw] [-v GATE=3] [-v EMPTY=100] [-v PMIN=0.002] [-v HIGH=0.02] \
+#        [-v MODERATE=0.05] [-v LOW=0.01] -f mixmodel_target_r_flags.awk <source_R_flags.tsv> <mixmodel_*.tsv>
 #
 # A source with raw p below PMIN cannot escalate the tier: dividing a p of 1e-4 by the
 # panel's smallest R manufactures a sizeable share out of nothing (47 Patterson targets
@@ -28,6 +43,10 @@ BEGIN {
   if (HIGH == "") HIGH = 0.02
   if (MODERATE == "") MODERATE = 0.05
   if (LOW == "") LOW = 0.01
+  if (GATE == "") GATE = 3
+  if (EMPTY == "") EMPTY = 100
+  if (PSCALE == "") PSCALE = "normalized"
+  if (PSCALE != "normalized" && PSCALE != "raw") { print "mixmodel_target_r_flags: PSCALE must be normalized or raw" > "/dev/stderr"; exit 1 }
   PROCINFO["sorted_in"] = "@ind_str_asc"
 }
 FILENAME == fQC {
@@ -41,14 +60,17 @@ FILENAME == fQC {
   }
   R[$1] = $(h["R_excl_self"]) + 0
   flag[$1] = $(h["flag"])
+  # raw: only sources with an almost empty palette (EMPTY times below the median or more) are sink-prone, as SEVERE
+  if (PSCALE == "raw") flag[$1] = ($(h["direction"]) == "underestimated" && $(h["fold_vs_median"]) + 0 >= EMPTY) ? "SEVERE" : "ok"
   next
 }
-FNR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; next }
+FNR == 1 { for (i = 1; i <= NF; i++) c[$i] = i; hasres = ("res_norm_ex_self" in c); next }
 $(c["group"]) != "target" { next }
 {
   t = $(c["sample_id"]); s = $(c["source_pop"]); p = $(c["p"]) + 0
+  if (hasres && !(t in resv) && $(c["res_norm_ex_self"]) != "NA" && $(c["res_norm_ex_self"]) != "") resv[t] = $(c["res_norm_ex_self"]) + 0
   if (p <= 0 || !(s in R) || R[s] <= 0) next
-  q = p / R[s]
+  q = (PSCALE == "raw") ? p : p / R[s]
   esc = (p >= PMIN)
   tot[t] += p; qtot[t] += q; lab[t] = $(c["label"])
   if (flag[s] == "SEVERE") {
@@ -60,7 +82,10 @@ $(c["group"]) != "target" { next }
   }
 }
 END {
-  print "sample_id", "label", "p_severe", "p_warn", "q_severe", "q_warn", "q_flagged", "top_flagged_source", "risk"
+  nr = 0
+  for (t in resv) rs[++nr] = resv[t]
+  if (nr > 0) { asort(rs); rmed = (nr % 2) ? rs[(nr + 1) / 2] : (rs[nr / 2] + rs[nr / 2 + 1]) / 2 }
+  print "sample_id", "label", "p_severe", "p_warn", "q_severe", "q_warn", "q_flagged", "top_flagged_source", "risk", "res_ratio", "poor_fit"
   for (t in tot) {
     if (tot[t] <= 0 || qtot[t] <= 0) continue
     a = (sev[t] + 0) / tot[t]; b = (warn[t] + 0) / tot[t]
@@ -71,6 +96,8 @@ END {
     else if (qb >= MODERATE) r = "MODERATE"
     else if (qf >= LOW)      r = "LOW"
     else                     r = "none"
-    printf "%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\n", t, lab[t], a, b, qa, qb, qf, top, r
+    if ((t in resv) && rmed > 0) { rr = resv[t] / rmed; pf = (rr >= GATE) ? "yes" : "no"; rrs = sprintf("%.2f", rr) } else { rrs = "NA"; pf = "NA" }
+    if (PSCALE == "raw" && r == "HIGH" && pf == "no") r = "MODERATE"
+    printf "%s\t%s\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%s\t%s\t%s\t%s\n", t, lab[t], a, b, qa, qb, qf, top, r, rrs, pf
   }
 }

@@ -561,6 +561,9 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
         output:
             risk=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
         params:
+            pscale=MIX_PALETTE_SCALE,
+            gate=MIX_R_FIT_GATE,
+            empty=MIX_R_EMPTY_FOLD,
             pmin=MIX_R_TARGET_PMIN,
             high=MIX_R_TARGET_HIGH,
             moderate=MIX_R_TARGET_MODERATE,
@@ -569,7 +572,7 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
             55
         shell:
             """
-            gawk -v fQC={input.flags} -v PMIN={params.pmin} -v HIGH={params.high} \
+            gawk -v fQC={input.flags} -v PSCALE={params.pscale} -v GATE={params.gate} -v EMPTY={params.empty} -v PMIN={params.pmin} -v HIGH={params.high} \
               -v MODERATE={params.moderate} -v LOW={params.low} \
               -f workflow/scripts/awk/mixmodel_target_r_flags.awk {input.flags} {input.bayesian} > {output.risk}
             """
@@ -673,6 +676,9 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
         output:
             risk=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
         params:
+            pscale=MIX_PALETTE_SCALE,
+            gate=MIX_R_FIT_GATE,
+            empty=MIX_R_EMPTY_FOLD,
             pmin=MIX_R_TARGET_PMIN,
             high=MIX_R_TARGET_HIGH,
             moderate=MIX_R_TARGET_MODERATE,
@@ -681,7 +687,7 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
             55
         shell:
             """
-            gawk -v fQC={input.flags} -v PMIN={params.pmin} -v HIGH={params.high} \
+            gawk -v fQC={input.flags} -v PSCALE={params.pscale} -v GATE={params.gate} -v EMPTY={params.empty} -v PMIN={params.pmin} -v HIGH={params.high} \
               -v MODERATE={params.moderate} -v LOW={params.low} \
               -f workflow/scripts/awk/mixmodel_target_r_flags.awk {input.flags} {input.bayesian} > {output.risk}
             """

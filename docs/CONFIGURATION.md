@@ -133,6 +133,8 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.r_target_high` | `0.02` | (0, 1] | R-corrected share on `SEVERE` sources at which a target is `HIGH` risk. |
 | `mixture.r_target_moderate` | `0.05` | (0, 1] | R-corrected share on `WARN` sources at which a target is `MODERATE` risk. |
 | `mixture.r_target_low` | `0.01` | (0, 1] | Total R-corrected share on flagged sources at which a target is `LOW` risk. |
+| `mixture.r_fit_gate` | `3` | > 0 | Fit gate of `target_R_flags.tsv`: `poor_fit` is `yes` when a target's `res_norm_ex_self` is this many times the median of the targets or more. With `palette_scale: raw` a `HIGH` risk needs `poor_fit = yes`. |
+| `mixture.r_empty_fold` | `100` | > 1 | `palette_scale: raw` only: a source whose R is this many times below the panel median or more counts as having an almost empty palette and is the only kind flagged in `target_R_flags.tsv` (as `SEVERE`). |
 | `mixture.cv` | `none` | `none` \| `evenodd` \| `loco` \| `k<K>` \| `test:<chroms>` | Chromosome hold-out CV for the NNLS fits: `evenodd` fits even and scores odd chromosomes and the reverse, `loco` holds out each chromosome in turn, `k<K>` uses K marker-balanced blocks, `test:1,3-5` holds out the listed chromosomes. Writes `<out>.cv.tsv`; the main table is unchanged. Not applied to Bayesian fits; run those by hand with `--cv evenodd --cv_only 1`. See "Chromosome hold-out CV" below. |
 | `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts for IBD length weighting. |
 
@@ -161,6 +163,7 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `q_severe`, `q_warn`, `q_flagged` | The same after the R correction (`q_flagged` is their sum). |
 | `top_flagged_source` | The flagged source with the largest corrected share (`-` if none). |
 | `risk` | `HIGH` if `q_severe >= r_target_high`; else `MODERATE` if `q_warn >= r_target_moderate`; else `LOW` if `q_flagged >= r_target_low`; else `none`. |
+| `res_ratio`, `poor_fit` | `res_norm_ex_self` over the median of the targets, and `yes` at `mixture.r_fit_gate` or more (`NA` if the table has no residual). |
 
 ### Chromosome hold-out CV (`mixture.cv`)
 

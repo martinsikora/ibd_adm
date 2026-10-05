@@ -241,6 +241,21 @@ contribute. It is a screen, not a corrected proportion.
 
 A source whose raw weight is below `r_target_pmin` (0.002) cannot raise the tier.
 
+`res_ratio` is the target's `res_norm_ex_self` divided by the median over the targets of the table, and `poor_fit` is
+`yes` at `mixture.r_fit_gate` (3) or more. With `palette_scale: raw` the tiers change in two ways. The weights are
+not divided by R again (`q = p`), and only sources at least `mixture.r_empty_fold` (100) times below the median R count as flagged (`SEVERE`), since under raw a
+source with an almost empty palette adds almost nothing to the fitted palette whatever its weight and its weight
+is not determined by the shape. `HIGH` needs `poor_fit = yes`; a target that would be `HIGH` with a good fit is
+`MODERATE`. The reason is the following. When the target is well fitted, a weight on such a source is a real
+contribution (in palette simulations with a single source whose palette was 100 times smaller, raw recovered it to
+within 0.02), and when ancestry that no source carries is missing, the misfit lands on that source (0.7 to 0.9 of the
+weight in the same simulations, against 0 for the truth). In the simulations the relative fit residual separated
+the two cases cleanly (0.03 to 0.04 against 0.4 to 0.75). On world_base_2 it separates them only partly: a weight
+above 0.5 on the single-genome source Ethiopia_Neolithic was predicted by `res_norm_ex_self` with AUC 0.8, and only
+4% of the targets are at 3 times the median, so most sink cases come out `MODERATE`. A ridge penalty on the weights
+and a bound on the free scale did not solve this in the same tests (the ridge also underestimates a real
+low-IBD ancestry, by 0.1 to 0.6 in the simulations).
+
 Reading it: `HIGH` means a `SEVERE` source could plausibly carry a real contribution that
 the raw weights hide, so treat that target's proportions on those sources as a direction,
 not a value. `none` means the flagged sources do not matter for this target. Most targets

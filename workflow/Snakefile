@@ -315,6 +315,14 @@ MIX_R_TARGET_PMIN = float(config.get("mixture", {}).get("r_target_pmin", 0.002))
 MIX_R_TARGET_HIGH = float(config.get("mixture", {}).get("r_target_high", 0.02))
 MIX_R_TARGET_MODERATE = float(config.get("mixture", {}).get("r_target_moderate", 0.05))
 MIX_R_TARGET_LOW = float(config.get("mixture", {}).get("r_target_low", 0.01))
+# fit gate of the target risk table: res_norm_ex_self over the median of the targets at which poor_fit is "yes"
+MIX_R_FIT_GATE = float(config.get("mixture", {}).get("r_fit_gate", 3.0))
+if MIX_R_FIT_GATE <= 0:
+    raise ValueError("mixture.r_fit_gate must be > 0")
+# raw palettes: a source this many times below the median R (or more) has an almost empty palette
+MIX_R_EMPTY_FOLD = float(config.get("mixture", {}).get("r_empty_fold", 100.0))
+if MIX_R_EMPTY_FOLD <= 1:
+    raise ValueError("mixture.r_empty_fold must be > 1")
 if not 0 <= MIX_R_TARGET_PMIN < 1:
     raise ValueError("mixture.r_target_pmin must be in [0, 1)")
 for _k, _v in (("high", MIX_R_TARGET_HIGH), ("moderate", MIX_R_TARGET_MODERATE), ("low", MIX_R_TARGET_LOW)):
