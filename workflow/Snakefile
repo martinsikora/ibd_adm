@@ -169,10 +169,9 @@ CUSTOM_PANELS = config.get("aggregation", {}).get("panels") or []
 #
 # Scoped PER PANEL, not global: "unassigned" (or any other pop_id) does not
 # mean the same thing in every panel. In a manually curated panel it can be a
-# deliberate, wholly-recipient catch-all bin (e.g. h05_g02_tier3_m's 192-sample
-# "unassigned"); in the raw default clustering panel the identical pop_id is
-# just cut_tree's ordinary terminal-cluster label and is mostly donor_recipient
-# (165 of 198 members here) -- excluding it there would silently drop a real
+# deliberate, wholly-recipient catch-all bin; in the raw default clustering
+# panel the identical pop_id is just cut_tree's ordinary terminal-cluster label
+# and is mostly donor_recipient -- excluding it there would silently drop a real
 # cluster from that panel's TVD tree. A panel not listed in full_cluster_pop_overrides
 # gets no override at all.
 _AGG_CFG = config.get("aggregation", {})
@@ -304,10 +303,9 @@ if MIX_DIAG_DISTAL_QUANTILE < 0 or MIX_DIAG_DISTAL_QUANTILE > 1:
 # where the panel has no proximate source. Strata are cut from the palette
 # geometry, so no metadata region column is involved.
 # source-level R scale flag thresholds, as fold-change vs the panel median R.
-# 2.5 is where validated cohorts start to show a real offset (Morocco 5.3x is
-# confirmed offset; the Steppe/WHG/EEF axis at <2.4x is confirmed clean); 10
-# separates those from the African sources at 20-500x. Panel-relative by
-# construction -- see workflow/scripts/awk/mixmodel_source_r_flags.awk.
+# A source whose R differs from the median by at least r_flag_warn is flagged
+# WARN, and by at least r_flag_severe SEVERE. Panel-relative by construction --
+# see workflow/scripts/awk/mixmodel_source_r_flags.awk.
 MIX_R_FLAG_WARN = float(config.get("mixture", {}).get("r_flag_warn", 2.5))
 MIX_R_FLAG_SEVERE = float(config.get("mixture", {}).get("r_flag_severe", 10.0))
 # per-target risk tiers built on the source R flags, on the R-corrected share

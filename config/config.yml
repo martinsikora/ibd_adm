@@ -57,70 +57,39 @@ clustering:
   #   normalize_ibd_vectors: L2-normalize each sample's row vector
   #   standardize_features:  z-score each feature (centre AND scale)
   #   scale_features:        divide each feature by its SD, do NOT centre
-  #
-  # standardize_features must stay OFF under cosine. Cosine is invariant to
-  # scaling a raw row, but centring every column turns a low row total into a
-  # systematic negative offset in all coordinates: 97-99% of a low-sharing
-  # sample's features end up below their column mean, so every such sample
-  # points along the same "everything below average" direction and they become
-  # mutually similar regardless of ancestry. Measured on a 19.7k-sample panel,
-  # this built a sink branch of 397 individuals mixing deep African, Andamanese
-  # and Hoabinhian populations with low-coverage Eurasians.
-  #
-  # scale_features keeps the useful half -- up-weighting low-variance donor
-  # columns, which is what resolves regions whose sharing sits in a few donors --
-  # without the offset centring introduces. Raw cosine (neither transform) is
-  # safe but coarser: it merged the Andean and Mesoamerican blocks and cost the
-  # Americas 25 -> 18 clusters. scale_features is the recommended default.
+  # Keep standardize_features off with cosine distance: centring turns a low row total into a negative offset in
+  # every coordinate, so all low-sharing samples point the same way and look alike regardless of ancestry.
+  # scale_features up-weights low-variance donor columns without that offset and is the recommended setting.
   normalize_ibd_vectors: false
   standardize_features: false
   scale_features: true
-  # adaptive tree-cut parameters (dynamicTreeCut hybrid); tuning these changes
-  # how many samples are left unassigned by the cut.
+  # Adaptive tree cut (dynamicTreeCut hybrid). The cut height is set by base_height / gate_height below.
   #
-  # cl_size -> minClusterSize. At 2 the cut emits 1-2 member clusters (151 of
-  # 998 at h0.5 on the reference panel), which are not resolved sub-populations
-  # and account for most of the apparent "shredding" of endogamous groups at
-  # finer cuts. 3 removes every sub-3 cluster at source. A 3/4/5 sweep showed 4
-  # and 5 buy more Africa/SouthAsia cohesion but double then triple the
-  # unassigned count for no Americas/Europe gain, so 3 is the knee.
+  # cl_size -> minClusterSize: smallest cluster the cut will emit (the dynamicTreeCut default is 20). Smaller
+  # values keep very small groups as clusters, larger ones leave more samples unassigned.
   cl_size: 3
-  deep_split: 3
-  # cluster_min_dist samples are assigned by k-NN majority vote over cluster_full
-  # samples (k = knn); knn: 1 = single-nearest-neighbour (original behaviour).
-  # Higher k prevents an isolated low-sharing cluster + one mis-placed bridge
-  # sample from turning into a diverse "sink".
+  # deep_split -> deepSplit (0-4; the dynamicTreeCut default is 1): how readily a branch below the cut height is
+  # split into separate clusters. At 0 only a clearly bimodal branch is split; higher values also split off cohesive
+  # sub-branches, so the same height gives more and smaller clusters. In the example, 1 gives its four populations as
+  # four clusters for any cut height from 0.7 to 1.5; with 3 it needs a height of 2.0 or more (see example/README.md).
+  deep_split: 1
+  # Samples with group cluster_min_dist are assigned to a cluster by a k-NN majority vote over the cluster_full
+  # samples (k = knn; 1 = the single nearest neighbour). Larger k protects against one mis-placed neighbour.
   knn: 7
   threads: 8
-  # base_height / gate_height define the ONE default clustering panel; both are
-  # REQUIRED whenever clustering.enabled is true (the workflow raises an error
-  # at load time otherwise). Equal values -> a plain cut at that height, no
-  # gating. gate_height below base_height -> the sharing-gated combination of
-  # the two: a coarse cluster keeps its base_height label unless its median
-  # per-sample genome-wide IBD clears min_sharing, in which case its finer
-  # gate_height subdivision is used instead.
-  #
-  # There is exactly one resulting panel either way, named cluster_h{base}_
-  # {TAG} (plain) or cluster_h{base}g{gate}_{TAG} (gated) -- not one panel per
-  # height. Set base_height == gate_height for the simple case (a single
-  # ordinary cut, no gate machinery involved).
-  #
-  # Gating rationale: no single height suits a worldwide panel. Cutting deeper
-  # resolves real populations where sharing is dense (Americas, later Europe)
-  # but shreds endogamous African and South Asian populations, which have an
-  # order of magnitude less IBD. Gating holds those regions at the base cut
-  # while the dense regions keep the full fine-cut gain, and roughly halves the
-  # unassigned count versus cutting globally.
-  #
-  # This is a DATA-SUFFICIENCY gate, not a split-quality test: sharing magnitude
-  # separates low-sharing REGIONS from the rest, but does not distinguish good
-  # from bad splits WITHIN them, so it also suppresses some genuine splits. See
-  # the header of workflow/scripts/r/cluster_cut_gated.R for the benchmark and
-  # the alternatives that scored worse. min_sharing is unused when
-  # gate_height == base_height.
-  base_height: 0.5
-  gate_height: 0.2
-  min_sharing: 250000
+  # base_height / gate_height: the cut height(s) of the default clustering panel; both are required when
+  # clustering.enabled is true. Lower heights give more, smaller clusters.
+  #   equal values: a plain cut at that height (panel cluster_h{base}_{TAG}).
+  #   gate_height < base_height: a sharing-gated combination of the two cuts (panel cluster_h{base}g{gate}_{TAG}):
+  #     a coarse cluster keeps its base_height label unless its median per-sample genome-wide IBD (cM) reaches
+  #     min_sharing, in which case its finer gate_height subdivision is used. This lets densely sampled,
+  #     high-sharing groups be split finely while low-sharing groups stay at the coarse cut. It checks that
+  #     there is enough data for a split, not that the split is good. min_sharing is unused for a plain cut.
+  # The example uses a plain cut: 1.0 lies in the middle of the heights (0.7-1.5) at which its four populations
+  # come out as four clusters with deep_split 1.
+  base_height: 1.0
+  gate_height: 1.0
+  min_sharing: 250000      # cM; only used when gate_height < base_height
 
 aggregation:
   max_concurrent_ibd_jobs: 8
@@ -153,7 +122,7 @@ aggregation:
   #       include_recipient_only_pops: true
   #       exclude_pops: [unassigned]
   color_map_shapes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-  color_map_embedding: tsne3      # tsne3 | mds3 : 3-D embedding of the TVD matrix
+  color_map_embedding: mds3       # tsne3 | mds3 : 3-D embedding of the TVD matrix (tsne3 fails with fewer clusters than its perplexity allows, as in the 4-cluster example)
   color_map_mapping: radial       # radial | pca_axes : embedding -> hue mapping
   color_tsne_chroma_min: 40
   color_tsne_chroma_max: 115
@@ -167,12 +136,8 @@ aggregation:
   color_tsne_hue_scale: 0.9
   color_tsne_hue_rotate: 25
   color_tsne_hue_spread: rank     # raw | range | rank
-  # quantile-spread chroma and luminance as well as hue. With the min-max
-  # default a skewed embedding axis bunches most clusters at the dark,
-  # desaturated end: on one panel median luminance fell to 54 and the palette
-  # held 0.4% vivid yellows and no vivid reds, even though the red/yellow hue
-  # bins were as populated as ever -- the hues were there, rendered as maroon
-  # and olive.
+  # Spread chroma and luminance by rank as well as hue. With raw (min-max) spreading a skewed embedding axis
+  # bunches most clusters at the dark, desaturated end.
   color_tsne_lc_spread: rank      # raw | rank
   ibd_params:
     min_l_cm: 1
@@ -242,8 +207,7 @@ mixture:
   # diag_sink_strata: too few and a large stratum becomes a catch-all whose
   # foreign sub-blocks misattribute the flag; too many and each stratum gets
   # homogeneous enough that its dominant source tracks the stratum's own
-  # internal cline. 12 is stable on a worldwide panel; the uniqueness rule below
-  # is what holds the test steady across the range.
+  # internal gradient. The uniqueness rule below holds the test steady across the range.
   #
   # diag_sink_min_gap: a sink must be the ONLY source over diag_sink_min_r in
   # its stratum and lead the runner-up by this margin. A stratum hiding a

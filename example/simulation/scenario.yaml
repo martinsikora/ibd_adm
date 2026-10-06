@@ -1,5 +1,5 @@
 # Four-population example: outgroup O, sources S1 and S2 (split 60 generations ago), and X, formed 12 generations ago
-# from S1 (0.6) and S2 (0.40) with size 400 since then. O splits from the S1/S2 ancestor 120 generations ago.
+# from S1 (0.6) and S2 (0.40) with size 1200 since then. O splits from the S1/S2 ancestor 120 generations ago.
 name: example_four_pop
 prefix: example_dataset
 seed: 20264001
@@ -13,7 +13,7 @@ populations:
 - {name: O, ne: 2000, n_samples: 12, group: cluster_full}
 - {name: S1, ne: 2000, n_samples: 12, group: cluster_full}
 - {name: S2, ne: 2000, n_samples: 12, group: cluster_full}
-- {name: X, ne: 400, n_samples: 12, group: cluster_full}
+- {name: X, ne: 1200, n_samples: 12, group: cluster_full}
 - {name: S12, ne: 4000}
 - {name: ROOT, ne: 4000}
 events:

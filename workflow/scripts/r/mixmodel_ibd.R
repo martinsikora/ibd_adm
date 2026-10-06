@@ -87,10 +87,8 @@ normalize_matrix_cols <- function(m) {
 ## all_pops includes the target populations themselves, so a target's palette carries
 ## a column of IBD with its own cluster. When that cluster is not also a source, no
 ## mixture of sources can predict it, and the miss enters res_norm as a fixed penalty
-## scaling with cohort size and endogamy rather than with ancestry fit. Observed case:
-## Guam/Saipan_Latte on the h05 tier3 panel, 111 co-members and a self share of 0.33,
-## where 98.8% of the MSE is that one column -- res_norm 0.0081, or 0.0009 once it is
-## dropped, i.e. from the worst target in the panel to better than any Remote Oceanian.
+## scaling with cohort size and endogamy rather than with ancestry fit. In a large,
+## endogamous cohort most of the squared error can sit in that one column.
 ##
 ## Both vectors are renormalized over the retained donors, so this compares palette
 ## SHAPE outside the own cluster. Dropping the row without renormalizing leaves y
@@ -873,43 +871,23 @@ if (args$cv != "none") {
 ## --------------------------------------------------
 ## read input data
 
-## 2026-08-25: the IBD read was `map_dfr(files, read_tsv)` -- sequential over
-## 4.4 GB of gzipped TSV (~330M rows), and the dominant cost of any fit with
-## few targets (it was >11 min of a ~15 min americas_deep run). Two changes,
-## applied ONLY when the panel is narrow enough to benefit:
+## The IBD tables are read in parallel, and only for the samples the fit needs.
 ##
 ##   1. Row prefilter. ibd_pop is consumed solely via
 ##      `filter(sample1 %in% target_samples)` / `%in% source_samples`, and
 ##      all_pops plus the matrix row space come from sample_map, not from
-##      ibd_pop -- so dropping rows for excluded samples is LOSSLESS. For a
-##      tune panel that is 301 of 19673 samples; for americas_deep, 1094.
-##   2. Parallel read across the 22 files, which only pays once (1) has cut
-##      what the workers hand back: multisession must serialize the result to
-##      the parent, and unfiltered that transfer eats the entire gain
-##      (1.6x for 1.75 GB returned, vs 3.3x for 90 MB).
+##      ibd_pop -- so dropping rows for excluded samples is LOSSLESS. It is applied
+##      only when the panel is narrow enough to benefit.
+##   2. Parallel read across the per-chromosome files, which only pays once (1) has
+##      cut what the workers hand back: multisession must serialize the result to
+##      the parent, and unfiltered that transfer eats the gain.
 ##
-## Benchmarked on chr19-22 (576 MB, 43.7M rows, warm cache, 8 workers):
-##     readr map_dfr, no prefilter        79.9 s   <- previous behaviour
-##     readr + prefilter, sequential      28.9 s
-##     readr + prefilter, parallel         9.4 s
-##     fread + prefilter, parallel         9.9 s
-##
-## readr is KEPT rather than swapped for data.table::fread, deliberately.
-## fread is no faster here (9.9 vs 9.4 s -- once the prefilter has removed 95%
-## of rows the cost is decompression and IO, not parsing) and it is not
-## bit-reproducible: fread and readr disagree by 1 ULP on 4.3% of `ibd` values
-## (max relative difference 2.2e-16). That is numerically irrelevant but the
-## MCMC is chaotic, so it re-draws the whole trajectory -- a measured
-## world_61_tune refit came out statistically equivalent yet different
-## (rhat_max<1.1 47.7% -> 51.1%, median TVD 0.0057, max 0.0433). Given the
-## 2026-08-21 decision to seed for reproducibility, a parser change that
-## invalidates every existing table is not worth 0.5 s.
-## With readr the prefiltered read is bit-identical to the unfiltered one
-## (verified), so seeded runs reproduce exactly.
-##
-## Wide panels (world_61 uses all 19673 samples) take the unchanged sequential
-## path: there the read is ~2% of a 7-10 h fit, so it is not worth the memory
-## risk of holding 22 parallel chunks.
+## readr is used rather than data.table::fread on purpose. The two parsers can
+## differ by 1 ULP on a few values, which is numerically irrelevant but makes the
+## MCMC redraw its whole trajectory, so a parser change would invalidate seeded
+## results. With readr the prefiltered read is bit-identical to the unfiltered one,
+## so seeded runs reproduce exactly. Wide panels (most of the samples) take the
+## unchanged sequential path, where the read is a small part of the run time.
 ##
 ## Metadata is read BEFORE the IBD tables (needed to build the keep set), which
 ## also puts the whole read ahead of set.seed() so it can never perturb the

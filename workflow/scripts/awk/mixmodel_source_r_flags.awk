@@ -11,21 +11,15 @@
 # it can be flagged before looking at a single fit.
 #
 # WHAT THIS IS NOT. It flags risk and DIRECTION. It is not a correction and does not
-# give a magnitude. Validated against published per-individual qpAdm (Harney 2023
-# Catoctin, Brielle 2023 Swahili, Simoes 2023 / Serrano 2023 North Africa, Patterson
-# 2021 Britain): the multiplicative offset for one and the same flagged source ranges
-# from 1.3x to 6.8x across cohorts, and no per-source transform, emission-budget
-# residual, or segment-length stratification predicted which applies. See
-# docs/ for the full negative result; do not reintroduce a correction here.
+# give a magnitude: the multiplicative offset for one and the same flagged source can
+# differ between cohorts, and no per-source transform predicts which one applies.
 #
 # A SEVERE/WARN TIER DOES NOT MEAN "BAD SOURCE". It means the source's proportions
 # sit on a different scale from the rest of the panel. Low R and low informativeness
-# are unrelated. Worked example: X01:Ethiopia_Neolithic has the lowest R in
-# world_base_2 (589, n=1) yet is the dominant source for the Hadza at p = 0.46-0.83
-# with p/se = 66-241 -- among the most confident assignments in the whole run -- and
-# correctly orders Sandawe/Somali/Masai/Mbuti/Dinka above Yemeni/Egyptian. Its
-# RANKING is excellent while its SCALE is off ~400x. It is also the panel's only
-# proxy for deep East African ancestry. Never drop a source on the strength of R.
+# are unrelated: a source with the lowest R in the panel can still be the dominant,
+# confidently assigned source for a target and rank targets correctly while its
+# scale is off. It may also be the panel's only proxy for its ancestry. Never drop a
+# source on the strength of R.
 #
 # TIERS ARE PANEL-RELATIVE. R is a donor-panel-size-weighted average of coalescent
 # rates, so the median is "a typical source in THIS panel". Flags are not comparable
@@ -42,9 +36,8 @@
 #   gawk -v NF_FILE=src_n.tsv -v PANEL=<name> [-v WARN=2.5] [-v SEVERE=10] \
 #        -f mixmodel_source_r_flags.awk src_prof.tsv
 #
-# R_excl_self is the REPORTED statistic (fold_vs_median is computed from it):
-# within-component sharing is 8% of the total for Morocco but 21-33% for
-# YRI/JuHoan/ShumLaka, i.e. it inflates precisely the sources most at risk of being
+# R_excl_self is the REPORTED statistic (fold_vs_median is computed from it): sharing
+# inside the source itself inflates precisely the sources most at risk of being
 # flagged. R_genomewide is emitted alongside for reference. For n=1 components the
 # two are identical by construction.
 

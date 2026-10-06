@@ -66,10 +66,8 @@ read_ibd_matrix <- function(files, inds, threads = 1L) {
 ##
 ## scale_features divides each column by its SD *without* centring. It keeps the
 ## part of the z-score that is useful -- up-weighting low-variance donor columns,
-## which is what resolves regions whose sharing is concentrated in a few donors
-## (Americas populations lost resolution under raw cosine: the Andean and
-## Mesoamerican blocks merged from 6/4/9 clusters into one each) -- while adding
-## no constant to any coordinate, so the offset artifact cannot arise.
+## which is what resolves regions whose sharing is concentrated in a few donors --
+## while adding no constant to any coordinate, so the offset artifact cannot arise.
 apply_feature_transforms <- function(m, standardize_features = FALSE,
                                      normalize_ibd_vectors = FALSE,
                                      scale_features = FALSE) {

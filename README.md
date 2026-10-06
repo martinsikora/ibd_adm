@@ -31,7 +31,7 @@ Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
  3. cluster_ibd     build_feature_matrix → distance_matrix → hclust
       │                 → cut_tree → plot_clusters
       │             sample×sample IBD matrix → distance → hierarchical clustering
-      │             → adaptive tree cut (one panel per height) → cluster labels
+      │             → adaptive tree cut (one default panel) → cluster labels
       │
  4. aggregate_ibd   make_default_agg_panel → aggregate_ibd → tvd
       │                 → default_color_map → tvd_plot
@@ -51,8 +51,8 @@ Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
 
 From stage 4 on, everything runs for two kinds of panel:
 
-- **default**: the built-in hierarchical clustering, one panel per cut height
-  (e.g. `cluster_h0.75_...`, `cluster_h1.0_...`);
+- **default**: the built-in hierarchical clustering, one panel at the cut height set by
+  `clustering.base_height` / `gate_height` (e.g. `cluster_h1.0_...`);
 - **custom**: panels listed under `aggregation.panels`, each with its own
   population definitions and colours (see [Building a custom panel](#building-a-custom-panel)).
 
@@ -68,9 +68,9 @@ from 60% `S1` and 40% `S2`. `config/` already points at it, so the whole workflo
 snakemake --cores 8        # a few minutes; seeds are fixed in config/config.yml
 ```
 
-It clusters the 48 individuals into ten clusters (X forms its own two), fits the sources and targets named in
-`config/panels/default/mixture_four_pop.tsv`, and runs the automatic source selection. The Bayesian fit gives X 0.70
-from `S1` and the NNLS fit 0.62, against 0.60 realized; the table of expected results, the clusters and the true
+It clusters the 48 individuals into four clusters, one per population, fits the sources and targets named in
+`config/panels/default/mixture_four_pop.tsv`, and runs the automatic source selection. The Bayesian fit gives X 0.62
+from `S1` and the NNLS fit 0.61, against 0.60 realized; the table of expected results, the clusters and the true
 ancestry of every individual are in [`example/expected/`](example/expected). [`example/README.md`](example/README.md)
 describes the data, the expected output and why the automatic source picker does not model X here.
 
@@ -239,8 +239,8 @@ coverage jobs run at the same time.
    individuals) and write your own `mixture_<set>.tsv` there, or rely on the
    automatic source selection. List any custom panels under `aggregation.panels`
    (empty in the example) and provide the corresponding `config/panels/<name>/` files.
-6. Set the clustering cut (`clustering.base_height` and `gate_height`; the example uses
-   0.5 gated to 0.2) and the masking length cutoff (`masking.ibd_params.min_l_cm`) for
+6. Set the clustering cut (`clustering.base_height`, `gate_height` and `deep_split`; the example uses a plain cut at
+   1.0 with `deep_split` 1, see [`example/README.md`](example/README.md#what-the-clustering-settings-do)) and the masking length cutoff (`masking.ibd_params.min_l_cm`) for
    your data.
 
 ---

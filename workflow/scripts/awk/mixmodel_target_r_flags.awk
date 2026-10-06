@@ -20,9 +20,7 @@
 # Fit gate (columns res_ratio and poor_fit). res_ratio is the target's res_norm_ex_self divided by the median over the
 # targets in the table, poor_fit is "yes" at GATE (default 3) or more. Under raw palettes a weight on an almost empty
 # source is a real contribution when the target is well fitted, and a sink for misfit (ancestry that no source
-# carries) when it is not: in palette simulations the fit residual separated the two cases cleanly (relative residual
-# 0.03 to 0.04 against 0.4 to 0.75), but on world_base_2 it separates them only partly (AUC 0.8 for a weight above
-# 0.5 on the sink source, 4% of targets at 3 times the median). With PSCALE=raw a HIGH tier therefore needs
+# carries) when it is not. The fit residual separates the two cases only partly. With PSCALE=raw a HIGH tier therefore needs
 # poor_fit = yes; a target that would be HIGH with a good fit is MODERATE (the weight is probably real but cannot
 # be verified from the shape). The normalized tiers are not changed by the gate.
 #
@@ -31,8 +29,7 @@
 #        [-v MODERATE=0.05] [-v LOW=0.01] -f mixmodel_target_r_flags.awk <source_R_flags.tsv> <mixmodel_*.tsv>
 #
 # A source with raw p below PMIN cannot escalate the tier: dividing a p of 1e-4 by the
-# panel's smallest R manufactures a sizeable share out of nothing (47 Patterson targets
-# on an axis with no offset in the first version).
+# panel's smallest R manufactures a sizeable share out of nothing.
 #
 # Tiers: HIGH if the R-corrected share on SEVERE sources is >= HIGH; MODERATE if the share
 # on WARN sources is >= MODERATE; LOW if the total flagged share is >= LOW; else none.

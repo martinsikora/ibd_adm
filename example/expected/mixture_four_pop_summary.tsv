@@ -1,5 +1,5 @@
 method	source	realized_mean	estimate_mean	estimate_sd_between_individuals
-bayesian	S1	0.604	0.696	0.034
-bayesian	S2	0.396	0.304	0.034
-nnls	S1	0.604	0.617	0.028
-nnls	S2	0.396	0.383	0.028
+bayesian	S1	0.595	0.624	0.026
+bayesian	S2	0.405	0.375	0.026
+nnls	S1	0.595	0.612	0.024
+nnls	S2	0.405	0.387	0.024

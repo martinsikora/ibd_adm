@@ -71,42 +71,32 @@ Which file holds what:
   likelihood. `raw` does not support `--cv`, and the workflow stops with a message if
   `mixture.cv` is set together with it.
 
-In simulations with known ancestry (two sources, one admixed target, 22 chromosomes) the
-`normalized` fit overestimated the share of the source with more total IBD by 0.03 to 0.04
-at mixed targets, and `raw` changed this to a small bias of 0.01 to 0.02 in the other
-direction, from sources that are relatives of the true sources and not the sources
-themselves.
+In the example (see [`example/README.md`](../example/README.md)), S1 emits 9% more total IBD than S2. The 12 admixed X
+individuals have a realized S1 share of 0.595. `normalized` gives them 0.624 (Bayesian) and 0.612 (NNLS) from S1, and `raw`
+gives 0.605 and 0.593.
 
-**Use `raw` only with sources of comparable total sharing.** Because the scale is free, a
-source whose palette is far smaller than the others (a single genome with little IBD
-detected, with a total below about 1% of the panel median) adds almost nothing to the
-fitted palette whatever weight it gets, so the fit cannot determine that weight and it
-absorbs mass. In a test on 19,497 targets with three such sources (single individuals with
-total palettes of 589, 1563 and 2160 cM against a median of 234,000 cM), `raw` gave
-Ethiopia_Neolithic a mean weight of 0.6 in East Africans (24% of individuals above 0.9),
-removed most of the Eurasian ancestry in African groups (East Africa 0.48 to 0.04, Southern
-Africa 0.11 to 0.003), and gave it 0.17 on average to European farmers with no change in
-the fit residual. NNLS with these sources moved most Micronesians and Melanesians onto it.
-Check the total palette of each source (mean cM per individual) before using `raw`, and
-leave out single, low-sharing sources. Flooring the palette totals or bounding the scale
-did not remove the problem in these tests.
+**Use `raw` only with sources of comparable total sharing.** Because the scale is free, a source whose palette is far
+smaller than the others (for example a single individual with little detected IBD, with a total below about 1% of the
+panel median) adds almost nothing to the fitted palette whatever weight it gets. The fit cannot determine that weight, so
+the source absorbs weight from any target that has ancestry no source carries. Check the total palette of each source
+(mean cM per individual) before using `raw`, and leave out single, low-sharing sources.
 
 ## Estimates and uncertainty
 
 | column | meaning |
 |---|---|
 | `p` | Weight of the source in the target. Sums to 1 over the sources of a target. |
-| `p_median` | Bayesian only: posterior median of the weight of each source, renormalised to sum to 1 over the sources of a target. It differs from `p` (the posterior mean) when the posterior is wide and skewed, typically for sources the data barely support; with few, well-separated candidates the two agree. In simulations with close-relative candidates it removed part of the weight the mean puts on sources that are not present, but it was not better in every case, so `p` stays the mean. |
-| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is about 3 times narrower than the error between individuals in simulations. With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior (about 1.3 times too narrow in simulations) and the weights are unchanged. In scenarios with many close-relative candidate sources that wide posterior, used for the weights as well, shifted them toward the middle of the simplex, which is why only the SE is taken from it. |
+| `p_median` | Bayesian only: posterior median of the weight of each source, renormalised to sum to 1 over the sources of a target. It differs from `p` (the posterior mean) when the posterior is wide and skewed, typically for sources the data barely support; with few, well-separated candidates the two agree. `p` stays the posterior mean. |
+| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is narrower than the spread between individuals (in the example 0.006 for S1, against 0.026 between the X individuals). With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior; the weights are unchanged. |
 | `active_sources_median` | Bayesian: median number of sources with weight above `mixture.active_eps` (default 1e-4) per posterior draw. |
 | `selected_sources_n` | Bayesian: number of sources passed to the continuous sampler after the active-source search. Equal to all sources when the search is off or `max_active_sources` covers them all. |
 
 How to read them:
 
 - A weight is only meaningful relative to its `se`. Treat `p / se` below about 3 as
-  indistinguishable from zero for reporting purposes. In one panel, sources the Bayesian
-  fit did not select sat at `p / se` around 0.6 to 0.8 (the prior leaves them slightly
-  above zero), while selected sources were at 3 or more. That gap is what you look for.
+  indistinguishable from zero for reporting purposes. Sources the Bayesian fit did not
+  select keep a small `p / se` (the prior leaves them slightly above zero), while selected
+  sources are at 3 or more. That gap is what you look for.
 - Bayesian weights are sparse. A source with a tiny `p` and a tiny `se` is not a small
   contribution measured precisely; it is a source the sampler mostly switched off.
 - NNLS weights are exactly 0 for sources the fit does not need, so its `se` for those is
@@ -115,14 +105,10 @@ How to read them:
 - The two estimators can disagree when sources are similar to each other, because
   collinear sources trade weight. Compare the sum over a group of related sources
   instead of each member. See [Collinear sources](#common-problems).
-- The Bayesian `se` of the default fit is too narrow. In simulations of two sources the
-  spread of the individual error was about 3.4 times the mean `se`, and the 95% interval
-  held the realized share for 46% of the individuals. With `mixture.two_stage_se: true`
-  (second fit with `mixture.genome_length_cm` observations) the ratio was 1.3 and the
-  coverage 88%; in scenarios with many close-relative candidates that `se` was wider than
-  the error. The weights are the same in both cases, which is why the genome-length fit
-  is used only for the `se`: used for the weights as well, its posterior mean moved weight
-  onto candidates that are not sources and toward the middle of the simplex.
+- The Bayesian `se` of the default fit is too narrow: it is smaller than the spread of the
+  estimates between individuals, so intervals from it undercover. `mixture.two_stage_se: true`
+  (second fit with `mixture.genome_length_cm` observations) gives a wider `se`. The weights are
+  the same in both cases; the genome-length fit is used only for the `se`.
 - The standard errors reflect sampling noise in the IBD, not error from a missing or
   mis-specified source.
 
@@ -210,10 +196,8 @@ Reading it:
 
 - The tiers are relative to the panel. Adding donors of one ancestry changes every other
   source's tier without any change in those sources. Do not compare flags between panels.
-- The flag gives the direction of a possible scale offset, not its size. Validation
-  against published qpAdm results found offsets for one and the same flagged source ranging
-  from 1.3× to 6.8× across cohorts, and no per-source correction that predicted which one
-  applies. Do not rescale weights by R.
+- The flag gives the direction of a possible scale offset, not its size, and the offset for
+  one flagged source can differ between targets. Do not rescale weights by R.
 - A flag is not a statement about source quality. A source with the lowest R in a panel
   can still be the only proxy for its ancestry and receive well-supported weights. Its
   ranking of targets can be excellent while its scale is off. Never drop a source only
@@ -243,23 +227,17 @@ A source whose raw weight is below `r_target_pmin` (0.002) cannot raise the tier
 
 `res_ratio` is the target's `res_norm_ex_self` divided by the median over the targets of the table, and `poor_fit` is
 `yes` at `mixture.r_fit_gate` (3) or more. With `palette_scale: raw` the tiers change in two ways. The weights are
-not divided by R again (`q = p`), and only sources at least `mixture.r_empty_fold` (100) times below the median R count as flagged (`SEVERE`), since under raw a
-source with an almost empty palette adds almost nothing to the fitted palette whatever its weight and its weight
-is not determined by the shape. `HIGH` needs `poor_fit = yes`; a target that would be `HIGH` with a good fit is
-`MODERATE`. The reason is the following. When the target is well fitted, a weight on such a source is a real
-contribution (in palette simulations with a single source whose palette was 100 times smaller, raw recovered it to
-within 0.02), and when ancestry that no source carries is missing, the misfit lands on that source (0.7 to 0.9 of the
-weight in the same simulations, against 0 for the truth). In the simulations the relative fit residual separated
-the two cases cleanly (0.03 to 0.04 against 0.4 to 0.75). On world_base_2 it separates them only partly: a weight
-above 0.5 on the single-genome source Ethiopia_Neolithic was predicted by `res_norm_ex_self` with AUC 0.8, and only
-4% of the targets are at 3 times the median, so most sink cases come out `MODERATE`. A ridge penalty on the weights
-and a bound on the free scale did not solve this in the same tests (the ridge also underestimates a real
-low-IBD ancestry, by 0.1 to 0.6 in the simulations).
+not divided by R again (`q = p`), and only sources at least `mixture.r_empty_fold` (100) times below the median R count
+as flagged (`SEVERE`): under raw, a source with an almost empty palette adds almost nothing to the fitted palette
+whatever its weight, so the data do not determine that weight. `HIGH` additionally needs `poor_fit = yes`; a target that
+would be `HIGH` with a good fit is `MODERATE`. When the target is well fitted, a weight on such a source can be a real
+contribution; when ancestry that no source carries is missing, the misfit lands on that source and the residual is large.
+The fit gate separates the two only partly, so many such targets come out `MODERATE`.
 
 Reading it: `HIGH` means a `SEVERE` source could plausibly carry a real contribution that
 the raw weights hide, so treat that target's proportions on those sources as a direction,
 not a value. `none` means the flagged sources do not matter for this target. Most targets
-in a panel without deep African or other extreme-R sources come out as `none`.
+in a panel without extreme-R sources come out as `none`.
 
 ## Residual diagnostic
 
@@ -340,9 +318,7 @@ misfit plus drift).
 `top_stratum` and `top_stratum_share`. A deep source that is genuinely ancestral to one
 clade shares broadly inside that clade and little outside, giving a low `n_eff_strata`. An
 unanchored profile is smeared across many. Low distality with few strata is a deep source
-doing real work; many strata suggests an intercept. In one panel this separated two
-equally old, equally distal lineages: one tracked a real ancestry axis and the other
-absorbed drift in the most inbred clusters.
+doing real work; many strata suggests an intercept.
 
 ## Chromosome hold-out CV
 
@@ -381,9 +357,9 @@ How to use it:
 | `rhat_max` very large, `rhat_median` near 1 | `p` of the offending sources | Sources at the simplex corner | Ignore; use `rhat_median` and `ess_median` |
 | `rhat_max` is `Inf` | Trace of the chains | Chains frozen at different values | Rerun with more iterations or check the proposal scale |
 | Weights differ between NNLS and Bayesian | `disc`, group sums | Collinear sources trading weight | Compare the total over the related group; remove or merge near-duplicate sources |
-| A minor component follows genome quality | Correlation of weight with `gp_avg_target`; z per individual | Absorbed noise from low-quality samples | Do not report it as ancestry; exclude low-quality sources; never filter on depth of imputed data |
+| A minor component follows sample quality | Correlation of its weight with a per-sample quality metric (coverage, genotype confidence) | Absorbed noise from low-quality samples | Do not report it as ancestry; exclude low-quality sources |
 | Weight rises with residual inside a stratum | `source_sink_by_stratum` | Source acting as a sink for drift | Add a closer source for that stratum, or drop the sink |
-| Deep source gets near-zero weight | Its palette against the targets | Gap too deep for IBD to convert into a proportion | Expect this beyond a few thousand years; use closer proxies and treat the deep member as a hypothesis |
+| Deep source gets near-zero weight | Its palette against the targets | Too little shared IBD to convert into a proportion | Use closer proxies and treat the deep member as a hypothesis |
 | `HIGH` in `target_R_flags` | `top_flagged_source` | Target relies on an extreme-R source | Report direction only |
 | Proportion changes when a source is added or removed | Sum over related sources | Collinear alternatives | Report the summed component, not each member |
 

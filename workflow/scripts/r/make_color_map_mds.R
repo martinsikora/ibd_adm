@@ -325,11 +325,9 @@ h <- (h * args$hue_scale + args$hue_rotate) %% 360
 
 ## Quantile-spread chroma and luminance. scale01() is min-max, so a skewed
 ## embedding axis (a few extreme values) leaves most clusters bunched at the
-## dark, desaturated end -- on the h0.5 panel that dropped the median luminance
-## from 68 to 54 and left 0.4% vivid yellows and no vivid reds, even though the
-## red and yellow HUE bins were as populated as before. Ranking uses the full
-## chroma/luminance range whatever the axis distribution, while preserving the
-## ordering those axes encode.
+## dark, desaturated end, with few vivid colours even where the hue bins are well
+## populated. Ranking uses the full chroma/luminance range whatever the axis
+## distribution, while preserving the ordering those axes encode.
 if (args$lc_spread_mode == "rank") {
   rank01 <- function(x) {
     n <- length(x)

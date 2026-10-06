@@ -322,13 +322,6 @@ pick_differentiated_spread <- function(
 ## a drifted, unadmixed population is extremal and has large slack. No labels,
 ## no allele frequencies -- just the population-by-population TVD matrix.
 ##
-## Validated on the ho_20260806 h0.5 panel: the minimising (A, B) pair recovers
-## the known admixture sources -- Siddi_Karnataka 0.008 (Agarwal / Tswana),
-## AfricanAmerican 0.021 (Chuvash / YRI), Aleut 0.002 (Mordovian / NeoAleut),
-## Russian_Archangelsk 0.012 (Russian_Vologda / Yakutia_LateNeolithic) -- while
-## unadmixed sources score an order of magnitude higher: Morocco_HG 0.237,
-## Marianas_Latte 0.235, Jomon 0.165, Haiom 0.157.
-##
 ## sep_q restricts A,B to pairs at least that quantile apart, so "between" means
 ## between two distinct ancestries rather than between two neighbours.
 admix_slack <- function(dist_mat, cand_idx, sep_q = 0.75) {
@@ -396,9 +389,9 @@ mix_residual <- function(y, S) {
 ## The greedy step works where a plain "reconstructible by
 ## others" test is not: an admixed population lies inside the cone spanned by
 ## its parents, so once the parents are selected it can never win. Testing
-## against *all* populations instead would also reject Iran_Neolithic (0.93
-## explained by Turkmenistan_Geoksyur -- redundancy, not admixture) and
-## USA_Beringia (0.97 explained by Mayan + Ojibwa -- ancestry, not admixture).
+## against *all* populations instead would also reject a population that is
+## well explained by a close relative (redundancy, not admixture) or by a
+## mixture of unrelated groups (ancestry, not admixture).
 ## Clades are visited in decreasing target mass so the largest ancestry blocks
 ## anchor the greedy sequence first.
 pick_differentiated_unadmixed <- function(
@@ -511,9 +504,7 @@ pick_differentiated_unadmixed <- function(
     keep <- idx[sz[idx] >= min_size & slack[idx] >= slack_thr]
     if (length(keep) == 0) {
       ## every candidate in this clade looks admixed. Representing it anyway
-      ## reintroduces exactly what the screen is for (on the h0.5 panel the
-      ## fallback readmitted two AfricanAmerican clusters at slack 0.010/0.021),
-      ## so by default the clade contributes no source and k comes out lower
+      ## reintroduces exactly what the screen is for, so by default the clade contributes no source and k comes out lower
       ## than requested. --source_allow_admixed_fallback restores the old
       ## behaviour of taking the least-bad candidate.
       n_fallback <- n_fallback + 1L
@@ -806,9 +797,8 @@ pop_sizes <- table(sample_map$pop_id)
 
 ## Populations that must never be chosen as a source. `unassigned` is not a
 ## population: it is the catch-all bin of individuals the tree cut could not
-## place (at h0.5 it held Khoe-San, Cameroonian Neolithic farmers, an Ethiopian
-## 4500BP, a Uruguayan pre-colonial and a Pakistani Iron Age sample), so picking
-## it declares one chimeric source ancestry. Dropped from the TVD before the
+## place (typically a mix of unrelated samples), so picking it declares one
+## chimeric source ancestry. Dropped from the TVD before the
 ## tree is built, so the differentiated picker's size-guard fallback cannot
 ## reinstate it; its samples still appear as targets in the output.
 excl <- trimws(unlist(strsplit(args$source_exclude_pops, ",")))

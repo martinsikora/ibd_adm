@@ -21,34 +21,22 @@
 ## finer distinctions. The gate is a DATA-SUFFICIENCY test, not a split-quality
 ## test -- see the caveat below.
 ##
-## Motivation. A single cut height cannot suit the whole panel. Going from
-## h0.5 to h0.3 on the ho_20260806 nscale tree resolves populations in the
-## Americas (Mayan/Zapotec, Wayku/Guarani, Andean coast/highland: 7 balanced
-## splits, 0 arbitrary) and in later Europe (18 informative / 4 arbitrary), but
-## in Africa and South Asia the same step mostly shreds single sampled
-## populations (YRI 1 -> 3 clusters, Yoruba 1 -> 3, Naidu, Vysya, Pulliyar,
-## JuHoan), dropping African population cohesion from 0.559 to 0.399.
+## Motivation. A single cut height cannot suit every part of a panel. A fine cut resolves
+## populations where sharing is dense, but in groups with little IBD the same cut mostly
+## shreds single sampled populations into arbitrary pieces. What separates the two cases
+## is how much IBD the cluster carries, so the gate uses the median per-sample genome-wide
+## IBD total (cM) of the coarse cluster, compared with `min_sharing`.
 ##
-## What separates those cases is how much IBD the cluster carries: the median
-## per-sample genome-wide total is ~600k cM for Americas clusters that split
-## informatively and ~15-18k cM for African ones that do not. Of the statistics
-## tested on a 139-split benchmark, this was the best (AUC 0.775); a permutation
-## gap test (0.502), odd/even-genome reproducibility (0.441-0.613) and the
-## direct cross-daughter sharing ratio (0.753) all did worse.
-##
-## CAVEAT, and it matters. Sharing magnitude separates low-sharing REGIONS from
-## the rest; it does not distinguish good splits from bad ones *within* them.
-## African informative vs arbitrary splits sit at 17.9k vs 14.8k median sharing,
-## South Asian ones at 125-188k vs 123-161k -- overlapping. So the gate freezes
-## low-sharing clusters wholesale, suppressing ~13 true distinctions
-## (Sugali/Adi_Dravider, Tiwari/Bhumihar, ...) along with the spurious ones. It
-## buys Americas/Europe resolution at the price of no refinement anywhere the
-## data are thin. A metadata-based guard scored better (AUC 0.885) but was
-## rejected as it makes the clustering depend on group_label quality.
+## CAVEAT. Sharing magnitude separates low-sharing groups from the rest; it does not
+## distinguish good splits from bad ones *within* them. The gate therefore freezes
+## low-sharing clusters wholesale, suppressing some real distinctions along with the
+## spurious ones. It buys resolution where sharing is dense at the price of no
+## refinement where the data are thin. A guard based on group labels would discriminate
+## better but would make the clustering depend on label quality, so it is not used.
 ##
 ## Non-nesting. The two cuts are not strictly nested -- dynamicTreeCut's PAM
-## stage assigns by distance, not purely by topology, so on this tree 16 fine
-## clusters (681 cluster_full samples) span more than one coarse cluster. The
+## stage assigns by distance, not purely by topology, so some fine
+## clusters can span more than one coarse cluster. The
 ## gate is applied per COARSE cluster to its own samples, so such a fine cluster
 ## can end up represented by only the subset whose coarse cluster passed. Every
 ## emitted group is still a well-defined set of samples; the count of affected
@@ -79,12 +67,10 @@ parser$add_argument("--fine_height", dest = "fine_height", default = NULL)
 ## NOTE: there is no minimum-daughter-size option here. Tiny
 ## (1-2 member) sub-clusters are a problem, but they are handled by
 ## dynamicTreeCut's own minClusterSize -- `clustering.cl_size` in config.yml,
-## passed to cluster_cut.R. Raising it from 2 to 3 removes every sub-3 cluster
-## at the CUT stage (151 -> 0 at h0.5), which is strictly better than reverting
-## them here: a post-hoc revert only relocates the problem, because the rest of
-## the coarse cluster has already taken fine labels, leaving the coarse label
-## holding the 1-2 reverted stragglers. Measured: such a guard reverted 92
-## samples and 28 landed in a newly-tiny group.
+## passed to cluster_cut.R. Raising it removes the small clusters at the CUT stage, which
+## is better than reverting them here: a post-hoc revert only relocates the problem,
+## because the rest of the coarse cluster has already taken fine labels, leaving the
+## coarse label holding the reverted stragglers.
 parser$add_argument("--out", dest = "out", help = "Output clusters.tsv")
 args <- parser$parse_args()
 

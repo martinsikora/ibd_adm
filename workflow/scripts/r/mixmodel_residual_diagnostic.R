@@ -27,14 +27,10 @@
 ## It also runs a PER-STRATUM SINK TEST (see below), which catches a failure
 ## mode the global flags miss: a source that is not ancestry at all but an
 ## unfitted intercept, soaking up drift wherever the panel has no proximate
-## source. Observed case: Ust'-Ishim/Ranis on the ho_20260806 h05 tier3 panel
-## scored coupling_p_res = 0.042 globally (unflagged) while inside South Asia it
-## correlated +0.70 with res_norm and +0.54 with cluster endogamy, taking 0.74 of
-## Pulliyar and 0.60 of Palliyar -- the most inbred clusters in the panel. Its
-## sibling dead-end Tianyuan/AR33K, over the same targets, scored +0.15 and +0.14
-## and was tracking an ancestry axis (r = -0.74 against the West Eurasian
-## sources, i.e. the ASI/AASI cline). Both are >40 ka lineages with no
-## descendants; only the stratified test tells them apart.
+## source. Such a source can look unflagged in a panel-wide test while inside one
+## stratum it correlates strongly with res_norm and with cluster endogamy, taking
+## most of the weight of the most inbred clusters, whereas a deep source that tracks a
+## real ancestry axis does not. Only the stratified test tells them apart.
 
 suppressPackageStartupMessages({
   library(readr); library(dplyr); library(tidyr); library(tibble); library(stringr)
@@ -280,7 +276,7 @@ flag <- lapply(src_pops, function(s) {
 ## Within a stratum the signature is unambiguous -- weight that rises with
 ## res_norm is absorbing misfit, weight that rises with endogamy is absorbing
 ## drift, and neither is ancestry. An ancestry component correlates with neither, and
-## loads on well-fit clusters (see the Tianyuan/Ust'-Ishim contrast in the header).
+## loads on well-fit clusters.
 ## for each element, the largest of the OTHER elements (-Inf if there is none)
 max_other <- function(v) {
   vapply(seq_along(v), function(i) {
@@ -317,14 +313,10 @@ sink_tbl <- lapply(strata_ids, function(st) {
 }) |> bind_rows() |>
   ## UNIQUENESS. A stratum that hides a badly-fit sub-block pulls EVERY distant
   ## source onto it at once, so several sources correlate with res_norm together
-  ## and none of them is specifically the intercept. Measured: in the 230-cluster
-  ## European stratum EastEurope_Mesolithic (+0.52) and Georgia_UP (+0.49) tie,
-  ## and in the AASI sub-block Japan_Jomon (+0.60, at mean_p 0.000), Tianyuan
-  ## (+0.56) and SouthAmerica_Paleoindian (+0.50) all clear the bar. A sink
-  ## stands alone: Ust'-Ishim over South Asia is +0.71 with the runner-up at
-  ## +0.39, Tagalog over Melanesia +0.72 with the runner-up at 0.00. So require
-  ## the source to be the only one over the bar AND clear of the next by a
-  ## margin; the shared case is reported as a stratum property instead.
+  ## and none of them is specifically the intercept. A real sink stands alone, with
+  ## the runner-up far below it. So require the source to be the only one over the bar
+  ## AND clear of the next by a margin; the shared case is reported as a stratum
+  ## property instead.
   group_by(stratum) |>
   mutate(
     n_over_r = sum(!is.na(r_res) & r_res >= SINK_MIN_R),
@@ -339,9 +331,7 @@ sink_tbl <- lapply(strata_ids, function(st) {
     ## Coupling to res_norm is NECESSARY, and drift coupling only corroborates.
     ## Drift coupling alone is not evidence of a sink: a proximate
     ## source takes a larger share in the more endogamous members of its own
-    ## stratum simply because they are less admixed. Measured here: JuHoan scores
-    ## r_endog = +0.57 over the KhoeSan stratum while being exactly the right
-    ## source for it (r_res = +0.20, fits fine). Absorbing drift is only a fault
+    ## stratum simply because they are less admixed. Absorbing drift is only a fault
     ## when it is also buying down misfit.
     drift_coupled = !is.na(r_endog) & r_endog >= SINK_MIN_R,
     sink = n_targets >= SINK_MIN_N & n_loaded >= 3 & mean_p >= SINK_MIN_P &
@@ -358,14 +348,9 @@ write_tsv(sink_tbl, paste0(OUT, ".source_sink_by_stratum.tsv"))
 ## The split is at which level the diffuseness lives. A lineage basal to one
 ## clade shares broadly *inside* that clade and little outside it; an
 ## unanchored profile is smeared across clades. Measuring the effective number
-## of strata a source's profile spans separates them where distality inverts
-## them -- NEO283 (Kotias Klde 25.7 ka, Dzudzuana-related, ancestral to later
-## West Eurasian farmers and hunter-gatherers) has the LOWEST distality of any
-## source here, 0.374, yet spans only 4.05 strata with 83.5% of its profile on
-## West Eurasia, landing beside Satsurblia (4.14) and EastEurope_Mesolithic
-## (4.11). Ust'-Ishim, more distal at 0.538, spans 8.65 strata with a top share
-## of 0.213 and only 34.4% on West Eurasia. Low distality plus few strata is a
-## deep source that carries ancestry; many strata is the intercept.
+## of strata a source's profile spans separates them where distality can invert
+## them: low distality plus few strata is a deep source that carries ancestry, and
+## many strata is the intercept.
 cat("__ clade confinement per source __\n")
 strat_of <- stratum[targets]
 clade <- lapply(src_pops, function(s) {

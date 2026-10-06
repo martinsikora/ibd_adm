@@ -65,8 +65,8 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 | `clustering.normalize_ibd_vectors` | `false` | bool | L2-normalize each sample's row vector before the distance. |
 | `clustering.standardize_features` | `false` | bool | Z-score each feature (centre and scale). Keep this off with cosine distance: centring turns a low row total into a negative offset in every coordinate, so all low-sharing samples point the same way and cluster together regardless of ancestry. Mutually exclusive with `scale_features`. |
 | `clustering.scale_features` | `false` | bool | Divide each feature by its SD without centring. This up-weights low-variance donor columns, as the z-score does, but avoids the offset. Together with the two keys above it sets the transform tag (`raw`/`norm`/`scale`/`scalenorm`/`zscore`/`zscorenorm`). |
-| `clustering.cl_size` | `2` | int | `dynamicTreeCut` minimum cluster size. At `2` the cut emits clusters of 1-2 members. These are not resolved sub-populations, and they cause most of the apparent shredding of endogamous groups at finer cuts. |
-| `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit` sensitivity. |
+| `clustering.cl_size` | `2` | int | `dynamicTreeCut` minimum cluster size (`minClusterSize`; the package default is 20). Smaller values keep very small groups as clusters, larger values leave more samples unassigned. |
+| `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit`: how readily a branch below the cut height is split into separate clusters. 0 splits only clearly bimodal branches, higher values also split off cohesive sub-branches, giving more and smaller clusters at the same height. The `dynamicTreeCut` package default is 1, which the example config uses; the code fallback when the key is omitted is 3. In the example, 1 gives the four populations as four clusters for any cut height from 0.7 to 1.5, while 3 needs a height of 2.0 or more (see [`example/README.md`](../example/README.md)). |
 | `clustering.knn` | `1` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
 | `clustering.threads` | `24` | int | Threads for the matrix/distance/clustering rules. |
 | `clustering.default_panel` | `default` (fallback) | string | Name of the default panel whose clusters seed aggregation. |
@@ -102,7 +102,7 @@ perceptually spread colour + shape map from a 3-D embedding of the TVD matrix.
 
 | key | default | type / allowed | controls |
 |-----|---------|----------------|----------|
-| `aggregation.color_map_embedding` | `tsne3` | `tsne3` \| `mds3` | 3-D embedding of the TVD matrix. |
+| `aggregation.color_map_embedding` | `tsne3` | `tsne3` \| `mds3` | 3-D embedding of the TVD matrix. `tsne3` fails when there are too few clusters for its perplexity (the four-cluster example uses `mds3`). |
 | `aggregation.color_map_mapping` | `radial` | `radial` \| `pca_axes` | How the embedding maps to hue. |
 | `aggregation.color_map_shapes` | `[0..19]` | non-empty int list | Plotting shape ids cycled across populations. |
 | `aggregation.color_tsne_chroma_min` | `20` | number | Min HCL chroma. |
@@ -127,8 +127,8 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.method` | `nnls` | `nnls` \| `bayesian` \| `both` \| list | Which estimator(s) to run. `both` = NNLS + Bayesian. |
 | `mixture.threads` | `12` | int | `future` workers per `run_models` job (parallel across targets). |
 | `mixture.seed` | `-1` | int | RNG seed for both estimators (the hybrid slot search and the NNLS jackknife resampling are stochastic too). Negative = unseeded. |
-| `mixture.r_flag_warn` | `2.5` | number > 1 | Source-level R scale QC. A source whose emitted IBD R differs from the panel median by at least this fold-change is flagged `WARN`. Validated cohorts start to show a real offset at about 2.5 (Morocco at 5.3x is a confirmed offset; the Steppe/WHG/EEF axis below 2.4x is clean). |
-| `mixture.r_flag_severe` | `10.0` | number > `r_flag_warn` | Fold-change at which the flag becomes `SEVERE` (separates those cases from African sources at 20-500x). |
+| `mixture.r_flag_warn` | `2.5` | number > 1 | Source-level R scale QC. A source whose emitted IBD R differs from the panel median by at least this fold-change is flagged `WARN`. |
+| `mixture.r_flag_severe` | `10.0` | number > `r_flag_warn` | Fold-change at which the flag becomes `SEVERE`. |
 | `mixture.r_target_pmin` | `0.002` | [0, 1) | Per-target R risk: raw weight below which a flagged source cannot raise a target's tier. Stops a weight close to zero divided by a small R from producing a spurious share. |
 | `mixture.r_target_high` | `0.02` | (0, 1] | R-corrected share on `SEVERE` sources at which a target is `HIGH` risk. |
 | `mixture.r_target_moderate` | `0.05` | (0, 1] | R-corrected share on `WARN` sources at which a target is `MODERATE` risk. |
@@ -153,7 +153,7 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `rhat_median`, `rhat_max` | Chain convergence. Judge it on `rhat_median` and `ess_*`. `rhat_max` becomes large for sources at the simplex corner (near-zero weight) without indicating a problem, and is `Inf` when chains are frozen at different values. `NA` for NNLS rows. |
 | `accept_rate*`, `ess_*`, `active_sources_median` | Bayesian sampler diagnostics (`NA` for NNLS). |
 
-**Source R flags** (`diagnostics/<prefix>.source_R_flags.tsv`) mark sources whose total emitted IBD R is far from the panel median. A low R deflates a source's proportions and a high R inflates them. The flag is relative to the panel, is computed before any fit, and is never a reason to drop a source. It gives the direction of a possible scale offset but not its size; no per-source correction was found that generalises. See `workflow/scripts/awk/mixmodel_source_r_flags.awk`.
+**Source R flags** (`diagnostics/<prefix>.source_R_flags.tsv`) mark sources whose total emitted IBD R is far from the panel median. A low R deflates a source's proportions and a high R inflates them. The flag is relative to the panel, is computed before any fit, and is never a reason to drop a source. It gives the direction of a possible scale offset but not its size. See `workflow/scripts/awk/mixmodel_source_r_flags.awk`.
 
 **Target R risk** (`diagnostics/<prefix>.target_R_flags.tsv`) shows, for each target, how much of its estimate rests on sources flagged in `source_R_flags.tsv`. It is computed from the Bayesian table and the source flags, with no extra IBD pass. The tier uses the R-corrected share `q = (p / R)`, renormalised over the sources. It uses this share because a source with a low R has a deflated raw `p`, so tiering on `p` would miss the worst cases. Dividing by R over-corrects as an estimator, so `q_flagged` is an upper bound on what the flagged sources could contribute. It is not a corrected proportion.
 
@@ -193,7 +193,7 @@ Compare models on the same folds, as a paired per-target difference in `ll_test`
 | `mixture.adapt_target_accept` | `0.01` | fraction | Target acceptance rate for adaptation. |
 | `mixture.local_move_prob` | `1.0` | prob | Probability of a local (vs global) move. |
 | `mixture.mean_active_sources` | `6.0` | number | Prior mean number of active sources. |
-| `mixture.two_stage_se` | `false` | bool | Bayesian two-stage SE. `false`: `se` is the posterior SD of the single fit, whose likelihood has a fixed 20000 observations; it is too narrow (about 3 times in simulations). `true`: a second fit on the same sources, with `mixture.genome_length_cm` observations, gives the `se`; the weights stay those of the fixed fit. Doubles the Bayesian run time. |
+| `mixture.two_stage_se` | `false` | bool | Bayesian two-stage SE. `false`: `se` is the posterior SD of the single fit, whose likelihood has a fixed 20000 observations; it is too narrow. `true`: a second fit on the same sources, with `mixture.genome_length_cm` observations, gives the `se`; the weights stay those of the fixed fit. Doubles the Bayesian run time. |
 | `mixture.genome_length_cm` | `3500` | number | Length of the genome covered by the IBD data in cM (about 3500 for human autosomes; set it for other species or partial genomes). Used only when `mixture.two_stage_se` is true; it is the number of trials of the likelihood behind the SE, as in SOURCEFIND. |
 | `mixture.palette_scale` | `normalized` | `normalized`, `raw` | How palettes are scaled before fitting; see the palette scale section of DIAGNOSTICS.md. `raw` is for re-estimating proportions when the sources differ strongly in total IBD, and is not suitable with single, low-sharing sources. `raw` does not support `mixture.cv`. |
 | `mixture.active_eps` | `1e-4` | number | Threshold below which a source counts as inactive. |
@@ -238,7 +238,7 @@ The source R flags (`*.source_R_flags.tsv`) are scheduled under the same conditi
 | key | default | type | meaning |
 |---|---|---|---|
 | `mixture.diag_distal_quantile` | `0.5` | [0, 1] | A source must reach this quantile of the distality distribution (mean TVD from the target mass) before the `absorber` / `poor_fit` flags apply. |
-| `mixture.diag_sink_strata` | `12` | int ≥ 1 | Number of strata the target clusters are cut into (ward.D2 on the TVD between palette profiles; no metadata region column is used). With too few, a large stratum becomes a catch-all whose foreign sub-blocks misattribute the flag. With too many, each stratum's dominant source starts tracking its internal cline. |
+| `mixture.diag_sink_strata` | `12` | int ≥ 1 | Number of strata the target clusters are cut into (ward.D2 on the TVD between palette profiles; no metadata region column is used). With too few, a large stratum becomes a catch-all whose foreign sub-blocks misattribute the flag. With too many, each stratum's dominant source starts tracking its internal gradient. |
 | `mixture.diag_sink_min_r` | `0.4` | (0, 1] | Correlation with `res_norm`, within a stratum, at which a source counts as a sink: weight that buys down misfit instead of describing ancestry. |
 | `mixture.diag_sink_min_n` | `15` | int ≥ 3 | Minimum targets in a stratum before its correlations are trusted. |
 | `mixture.diag_sink_min_p` | `0.01` | [0, 1] | Minimum mean weight in the stratum; below this a source has no material influence there. |
