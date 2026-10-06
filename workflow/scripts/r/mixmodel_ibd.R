@@ -1309,6 +1309,9 @@ if (args$method == "bayesian") {
     ibd_pop_source_fit <- raw_source_matrix(total_source_sum, n_src_ind)
     stopifnot(identical(colnames(ibd_pop_source_fit), colnames(ibd_pop_source)),
               identical(rownames(ibd_pop_source_fit), rownames(ibd_pop_source)))
+  } else {
+    ## the matrix defined above has the columns in a different order; the weights follow source_pops
+    ibd_pop_source_fit <- ibd_pop_source
   }
 
   p_genome <- future_map_dfr(target_samples, function(x) {
