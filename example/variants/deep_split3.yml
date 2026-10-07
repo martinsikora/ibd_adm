@@ -1,0 +1,7 @@
+# Cut the same tree with deep_split 3 instead of the default 1 (clustering only is enough to see the effect). Run in a copy:
+#   cp -r . ../ibd_adm_ds3 && cd ../ibd_adm_ds3 && rm -r results/panels && \
+#   snakemake --cores 8 results/panels/cluster_h1.0_dcosine_nscale_mward_D2/clustering/default.example_dataset.clusters.tsv \
+#     --configfile example/variants/deep_split3.yml
+# (the target comes before --configfile, which would otherwise take it as another file)
+clustering:
+  deep_split: 3

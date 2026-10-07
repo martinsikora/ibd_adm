@@ -1,0 +1,3 @@
+source_pop	distality	is_distal	n_loaded	mean_p_loaded	mean_res_loaded	mean_miss_score	coupling_p_res	modal_miss_pop	disc	sink_strata	max_r_res	max_r_endog	sink_stratum	n_eff_strata	top_stratum	top_stratum_share	sink	absorber	poor_fit	flag_type
+C6	0.37386235024600223	FALSE	2	0.9988170326264217	0.06542109223114854	0.3675183808408762	0.4982223990306776	C4	0.021544304535557002	0	NA	NA	NA	1.0935378113010983	S2	0.9821827446430308	FALSE	FALSE	FALSE	
+C0	0.6111026867902247	TRUE	1	1	0	0	-0.49822239903067744	C4	0.021544304535556974	0	NA	NA	NA	1.2045766576953196	S1	0.9541438684416516	FALSE	FALSE	FALSE	

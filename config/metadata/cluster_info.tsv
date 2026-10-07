@@ -1,7 +1,0 @@
-cluster_label	cluster_alias	color	fill	shape
-C1	PopA_Ancient	#E64B35	#E64B35	16
-C2	PopB_Bronze	#4DBBD5	#4DBBD5	17
-C3	PopC_IronAge	#00A087	#00A087	15
-C4	PopD_Neolithic	#3C5488	#3C5488	18
-C5	PopE_Medieval	#F39B7F	#F39B7F	0
-C6	PopF_Modern	#8491B4	#8491B4	1

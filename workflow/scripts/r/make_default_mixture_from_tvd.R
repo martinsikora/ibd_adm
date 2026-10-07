@@ -608,14 +608,6 @@ parser$add_argument("--k_max",
   help = "Maximum k to evaluate"
 )
 
-parser$add_argument("--seed",
-  action = "store",
-  dest = "seed",
-  type = "integer",
-  default = 1,
-  help = "Random seed"
-)
-
 parser$add_argument("--source_pick_method",
   action = "store",
   dest = "source_pick_method",

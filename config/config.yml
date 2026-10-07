@@ -16,16 +16,14 @@ prefix: example_dataset
 tmpdir: tmp
 
 ref:
-  # Reference FASTA. Reserved: read into the config but not used by any rule;
-  # can be left as a placeholder.
-  fasta: /path/to/reference/genome.fa
   # Chromosome-length file (2 cols: chrom, length) used by `bedtools genomecov`
   # during masking. Must cover every chromosome in `chromosomes` below.
   genome: config/genome.txt
   # Plain list of chromosomes to process, one per line (autosomes by default).
   chromosomes: config/chromosomes.txt
-  # Per-chromosome marker counts (cols: chrom, n); used by the mixture model to
-  # weight IBD by marker density. Also the fallback for mixture.marker_file.
+  # Per-chromosome marker counts (cols: chrom, n); used by the mixture model as
+  # block sizes for the weighted jackknife SEs and to balance k<K> CV folds.
+  # Also the fallback for mixture.marker_file.
   marker_file: config/n_markers.tsv
 
 input_data:
@@ -39,8 +37,6 @@ input_data:
   individuals: config/individuals.tsv
 
 masking:
-  # Cap on simultaneous masking IBD jobs (bedtools genomecov).
-  max_concurrent_ibd_jobs: 8
   # Segment filters for the coverage/mask pass (short segments only).
   ibd_params:
     min_l_cm: 2      # min segment length (cM)
@@ -71,7 +67,7 @@ clustering:
   # deep_split -> deepSplit (0-4; the dynamicTreeCut default is 1): how readily a branch below the cut height is
   # split into separate clusters. At 0 only a clearly bimodal branch is split; higher values also split off cohesive
   # sub-branches, so the same height gives more and smaller clusters. In the example, 1 gives its four populations as
-  # four clusters for any cut height from 0.7 to 1.5; with 3 it needs a height of 2.0 or more (see example/README.md).
+  # four clusters for any cut height from 0.5 to 1.2; with 3 it needs a height of 1.5 or more (see example/README.md).
   deep_split: 1
   # Samples with group cluster_min_dist are assigned to a cluster by a k-NN majority vote over the cluster_full
   # samples (k = knn; 1 = the single nearest neighbour). Larger k protects against one mis-placed neighbour.
@@ -85,8 +81,8 @@ clustering:
   #     min_sharing, in which case its finer gate_height subdivision is used. This lets densely sampled,
   #     high-sharing groups be split finely while low-sharing groups stay at the coarse cut. It checks that
   #     there is enough data for a split, not that the split is good. min_sharing is unused for a plain cut.
-  # The example uses a plain cut: 1.0 lies in the middle of the heights (0.7-1.5) at which its four populations
-  # come out as four clusters with deep_split 1.
+  # The example uses a plain cut at 1.0, inside the range (0.5-1.2) that gives its four populations as four clusters with
+  # deep_split 1.
   base_height: 1.0
   gate_height: 1.0
   min_sharing: 250000      # cM; only used when gate_height < base_height
@@ -146,8 +142,7 @@ aggregation:
   panels: []
     # Custom aggregation panels. Each name must be a directory under
     # config/panels/<name>/ providing aggregate.tsv (+ optional color_map.tsv and
-    # mixture_<set>.tsv). The example panel here is built by
-    # workflow/scripts/r/build_example_panel.R (or written by hand).
+    # mixture_<set>.tsv); see "Custom-panel files" in the README.
     # (none in this example: the sources and targets are given in config/panels/default/mixture_four_pop.tsv)
 
 mixture:
@@ -262,4 +257,3 @@ ibd_window_peaks:
   contrib_top_n: 5
   point_size: 0.8
   max_concurrent_coverage_jobs: 2
-  sample_file: config/individuals.tsv

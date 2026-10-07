@@ -86,14 +86,6 @@ parser$add_argument("-o", "--out",
   help = "Output color map file"
 )
 
-parser$add_argument("-k", "--k_clusters",
-  action = "store",
-  dest = "k_clusters",
-  type = "integer",
-  default = 8,
-  help = "Number of shape clusters (default: 8)"
-)
-
 parser$add_argument("-s", "--shapes",
   action = "store",
   dest = "shapes",

@@ -1,0 +1,4 @@
+# Re-fit the mixtures with raw (cM) palettes instead of normalized ones. Run in a copy of the repository:
+#   cp -r . ../ibd_adm_raw && cd ../ibd_adm_raw && snakemake --cores 8 --configfile example/variants/raw.yml
+mixture:
+  palette_scale: raw

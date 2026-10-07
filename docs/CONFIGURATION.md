@@ -27,10 +27,9 @@ Contents: [Top level](#top-level) · [`ref`](#ref) · [`input_data`](#input_data
 
 | key | default | type | controls |
 |-----|---------|------|----------|
-| `ref.fasta` | `/path/to/reference/genome.fa` | path | **Reserved.** Read into the config but not used by any rule. Leave it as a placeholder. |
 | `ref.genome` | `/path/to/reference/genome.genome` | path | Chromosome-length file (`chrom  length`) passed to `bedtools genomecov` during masking. Must cover every chromosome in `ref.chromosomes`. |
 | `ref.chromosomes` | `config/chromosomes.txt` | path | Plain list of chromosomes (one per line) → `CHROMS`; fills the `{chrom}` wildcard everywhere. Empty file → error. |
-| `ref.marker_file` | `config/n_markers.tsv` | path | Per-chromosome marker counts (`chrom  n`); the mixture model weights IBD by marker density. Fallback for `mixture.marker_file`. |
+| `ref.marker_file` | `config/n_markers.tsv` | path | Per-chromosome marker counts (`chrom  n`); used as block sizes for the weighted leave-one-chromosome-out jackknife SEs and to balance the folds of `mixture.cv: k<K>`. Fallback for `mixture.marker_file`. |
 
 ## `input_data`
 
@@ -45,7 +44,6 @@ Stage 1 (`ibd_mask.smk`): build a mask over regions of excess IBD coverage.
 
 | key | default | type | controls |
 |-----|---------|------|----------|
-| `masking.max_concurrent_ibd_jobs` | `8` | int | Cap on simultaneous masking coverage jobs (`bedtools genomecov`). |
 | `masking.ibd_params.min_l_cm` | `2` | number | Min segment length (cM) counted toward coverage. |
 | `masking.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `masking.ibd_params.min_lod` | `3` | number | Min LOD/score. |
@@ -66,7 +64,7 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 | `clustering.standardize_features` | `false` | bool | Z-score each feature (centre and scale). Keep this off with cosine distance: centring turns a low row total into a negative offset in every coordinate, so all low-sharing samples point the same way and cluster together regardless of ancestry. Mutually exclusive with `scale_features`. |
 | `clustering.scale_features` | `false` | bool | Divide each feature by its SD without centring. This up-weights low-variance donor columns, as the z-score does, but avoids the offset. Together with the two keys above it sets the transform tag (`raw`/`norm`/`scale`/`scalenorm`/`zscore`/`zscorenorm`). |
 | `clustering.cl_size` | `2` | int | `dynamicTreeCut` minimum cluster size (`minClusterSize`; the package default is 20). Smaller values keep very small groups as clusters, larger values leave more samples unassigned. |
-| `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit`: how readily a branch below the cut height is split into separate clusters. 0 splits only clearly bimodal branches, higher values also split off cohesive sub-branches, giving more and smaller clusters at the same height. The `dynamicTreeCut` package default is 1, which the example config uses; the code fallback when the key is omitted is 3. In the example, 1 gives the four populations as four clusters for any cut height from 0.7 to 1.5, while 3 needs a height of 2.0 or more (see [`example/README.md`](../example/README.md)). |
+| `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit`: how readily a branch below the cut height is split into separate clusters. 0 splits only clearly bimodal branches, higher values also split off cohesive sub-branches, giving more and smaller clusters at the same height. The `dynamicTreeCut` package default is 1, which the example config uses; the code fallback when the key is omitted is 3. In the example, 1 gives the four populations as four clusters for any cut height from 0.5 to 1.2, while 3 needs a height of 1.5 or more (see [`example/README.md`](../example/README.md)). |
 | `clustering.knn` | `1` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
 | `clustering.threads` | `24` | int | Threads for the matrix/distance/clustering rules. |
 | `clustering.default_panel` | `default` (fallback) | string | Name of the default panel whose clusters seed aggregation. |
@@ -81,6 +79,7 @@ Stage 4 (`aggregate_ibd.smk`): per-population IBD sharing + TVD + colour map.
 | key | default | type / allowed | controls |
 |-----|---------|----------------|----------|
 | `aggregation.max_concurrent_ibd_jobs` | `8` | int | Global-resource cap on concurrent `aggregate_ibd` jobs. |
+| `aggregation.seed` | unset | int | Seed of the random donor subset (`n - 1` of the `n` donors of each population) used for the between-population entries of the palettes. Unset: a new draw per chromosome and per run. Set it for reproducible palettes. |
 | `aggregation.ibd_params.min_l_cm` | `1` | number | Min segment length (cM) for the masked total-IBD pass (stage 2 `ibd_tot`). |
 | `aggregation.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `aggregation.ibd_params.min_lod` | `3` | number | Min LOD/score. |
@@ -136,7 +135,7 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.r_fit_gate` | `3` | > 0 | Fit gate of `target_R_flags.tsv`: `poor_fit` is `yes` when a target's `res_norm_ex_self` is this many times the median of the targets or more. With `palette_scale: raw` a `HIGH` risk needs `poor_fit = yes`. |
 | `mixture.r_empty_fold` | `100` | > 1 | `palette_scale: raw` only: a source whose R is this many times below the panel median or more counts as having an almost empty palette and is the only kind flagged in `target_R_flags.tsv` (as `SEVERE`). |
 | `mixture.cv` | `none` | `none` \| `evenodd` \| `loco` \| `k<K>` \| `test:<chroms>` | Chromosome hold-out CV for the NNLS fits: `evenodd` fits even and scores odd chromosomes and the reverse, `loco` holds out each chromosome in turn, `k<K>` uses K marker-balanced blocks, `test:1,3-5` holds out the listed chromosomes. Writes `<out>.cv.tsv`; the main table is unchanged. Not applied to Bayesian fits; run those by hand with `--cv evenodd --cv_only 1`. See "Chromosome hold-out CV" below. |
-| `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts for IBD length weighting. |
+| `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts (jackknife block sizes, CV fold balancing). |
 
 ### Mixture output tables
 
@@ -264,7 +263,6 @@ peaks. **Disabled by default.**
 | `ibd_window_peaks.contrib_top_n` | `5` | int | Top-N contributing populations reported. |
 | `ibd_window_peaks.point_size` | `0.8` | number | Plot point size. |
 | `ibd_window_peaks.max_concurrent_coverage_jobs` | `2` | int | Global-resource cap on coverage jobs. |
-| `ibd_window_peaks.sample_file` | `config/individuals.tsv` | path | Sample sheet for the peak scan. |
 | `ibd_window_peaks.panels` | (falls back to `aggregation.panels`) | list | Panels to scan. |
 | `ibd_window_peaks.min_l_cm` / `min_lod` | (fall back to `aggregation.ibd_params`) | number | Segment filters for the scan. |
 

@@ -1,0 +1,5 @@
+stratum	exemplar	n_targets	source_pop	n_loaded	mean_p	r_res	r_endog	n_over_r	r_res_gap	shared_gradient	drift_coupled	sink	sink_via
+S1	C0	1	C0	1	1	NA	NA	0	NA	FALSE	FALSE	FALSE	
+S1	C0	1	C6	0	0	NA	NA	0	NA	FALSE	FALSE	FALSE	
+S2	C6	2	C0	0	0.0011829673735783116	NA	NA	0	NA	FALSE	FALSE	FALSE	
+S2	C6	2	C6	2	0.9988170326264217	NA	NA	0	NA	FALSE	FALSE	FALSE	

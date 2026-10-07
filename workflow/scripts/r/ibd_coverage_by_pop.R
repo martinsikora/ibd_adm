@@ -104,28 +104,8 @@ parser$add_argument("--sample_col",
   action = "store",
   dest = "sample_col",
   default = "sample2",
-  help = "Column in ibd_file used for pop_id mapping [default %(default)s]"
-)
-
-parser$add_argument("--chrom_col",
-  action = "store",
-  dest = "chrom_col",
-  default = "chromosome",
-  help = "Chromosome column in ibd_file [default %(default)s]"
-)
-
-parser$add_argument("--start_col",
-  action = "store",
-  dest = "start_col",
-  default = "pos_start",
-  help = "Start position column in ibd_file [default %(default)s]"
-)
-
-parser$add_argument("--end_col",
-  action = "store",
-  dest = "end_col",
-  default = "pos_end",
-  help = "End position column in ibd_file [default %(default)s]"
+  choices = c("sample1", "sample2"),
+  help = "Which individual of each pair is mapped to pop_id [default %(default)s]"
 )
 
 parser$add_argument("--min_l_cm",
@@ -133,7 +113,7 @@ parser$add_argument("--min_l_cm",
   dest = "min_l_cm",
   type = "double",
   default = 0,
-  help = "Minimum tract length in cM if l_cm exists [default %(default)s]"
+  help = "Minimum tract length in cM [default %(default)s]"
 )
 
 parser$add_argument("--min_lod",
@@ -141,7 +121,7 @@ parser$add_argument("--min_lod",
   dest = "min_lod",
   type = "double",
   default = 0,
-  help = "Minimum LOD score if lod exists [default %(default)s]"
+  help = "Minimum LOD score [default %(default)s]"
 )
 
 parser$add_argument("--inclusive_end",
@@ -157,7 +137,15 @@ args <- parser$parse_args()
 ## read data
 
 cat("__ reading IBD data __\n")
-ibd <- read_tsv(args$ibd_file, show_col_types = FALSE)
+## columns are read by position (1-6 and 9), not by header name
+ibd <- read_tsv(args$ibd_file,
+  skip = 1, col_names = FALSE, col_select = c(1:6, 9),
+  col_types = cols(.default = col_character()),
+  show_col_types = FALSE
+)
+colnames(ibd) <- c("sample1", "sample2", "chromosome", "pos_start", "pos_end", "lod", "l_cm")
+ibd <- ibd |>
+  mutate(across(c(pos_start, pos_end), as.numeric), across(c(lod, l_cm), as.numeric))
 
 cat("__ reading metadata __\n")
 sample_map <- read_tsv(args$sample_file, show_col_types = FALSE)
@@ -166,27 +154,13 @@ if (!"sample_id" %in% colnames(sample_map) || !"pop_id" %in% colnames(sample_map
   stop("sample_file must include columns: sample_id, pop_id")
 }
 
-req_cols <- c(args$sample_col, args$chrom_col, args$start_col, args$end_col)
-missing_cols <- setdiff(req_cols, colnames(ibd))
-if (length(missing_cols) > 0) {
-  stop(paste("Missing required columns in ibd_file:", paste(missing_cols, collapse = ", ")))
-}
-
-
 ## --------------------------------------------------
 ## preprocess
 
 cat("__ processing tracts __\n")
 
-ibd1 <- ibd
-if ("l_cm" %in% colnames(ibd1)) {
-  ibd1 <- ibd1 |>
-    filter(.data[["l_cm"]] >= args$min_l_cm)
-}
-if ("lod" %in% colnames(ibd1)) {
-  ibd1 <- ibd1 |>
-    filter(.data[["lod"]] >= args$min_lod)
-}
+ibd1 <- ibd |>
+  filter(l_cm >= args$min_l_cm, lod >= args$min_lod)
 
 if ("group" %in% colnames(sample_map)) {
   valid_samples <- sample_map |>
@@ -202,9 +176,9 @@ d <- ibd1 |>
   filter(.data[[args$sample_col]] %in% valid_samples) |>
   transmute(
     sample_id = .data[[args$sample_col]],
-    chromosome = as.character(.data[[args$chrom_col]]),
-    pos_start = as.integer(.data[[args$start_col]]),
-    pos_end = as.integer(.data[[args$end_col]])
+    chromosome = as.character(chromosome),
+    pos_start = as.integer(pos_start),
+    pos_end = as.integer(pos_end)
   ) |>
   filter(
     !is.na(sample_id),

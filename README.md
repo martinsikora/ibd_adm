@@ -2,22 +2,33 @@
   <img src="docs/assets/ibd_adm_logo.svg" alt="ibd_adm: fine scale ancestry from IBD sharing palettes" width="520">
 </h1>
 
-`ibd_adm` is a method for genetic clustering and ancestry estimation using IBD-sharing profiles. Starting from precomputed pairwise IBD segments (one file per chromosome, for example from IBDseq or hap-IBD), it:
+`ibd_adm` is a collection of tools for genetic clustering and supervised ancestry estimation using IBD-sharing profiles. Starting from precomputed pairwise IBD segments (one file per chromosome, for example from IBDseq), the workflow implements:
 
-- masks regions with excess IBD coverage and sums IBD per pair of individuals;
-- clusters individuals into populations;
-- computes IBD sharing profiles and a TVD (total variation distance) matrix between populations;
-- estimates ancestry proportions of target individuals from source populations (NNLS and Bayesian), with residual diagnostics;
-- runs PCA on the sharing profiles; and
-- optionally scans the genome for population-specific IBD peaks.
+- preprocessing of pairwise IBD sharing data, including masking of excess IBD coverage region and total IBD per pair of individuals;
+- genetic clustering of individuals into populations based on total IBD sharing profiles;
+- aggregation of pairwise total IBD sharing into IBD sharing palettes between individuals and populations;
+- between-population TVD (total variation distance) matrix estimation and visualization;
+- supervised ancestry proportion estimation of target individuals from source populations (NNLS and Bayesian), with residual diagnostics;
+- PCA on the IBD sharing palettes; and
+- optionally population-specific IBD peak scanning.
+
+**Key terms**
+
+- **Palette**: IBD sharing profiles of individuals, i.e. the total IBD (cM) an individual shares with each donor population. Population palettes are the
+  IBD-sharing profiles between populations (and the TVD matrix is the distance between them).
+- **Population / cluster**: a group of individuals, either a cluster from the built-in clustering or a population
+  defined in a custom panel.
+- **Panel**: one set of population definitions (the *default* panel from the clustering, or a *custom* panel) on which
+  the stages from aggregation onwards run (see [Pipeline overview](#pipeline-overview)).
+- **Source and target**: a target individual's palette is modelled as a mixture of the palettes of the source
+  populations. A *mixture set* (`mixture_<set>.tsv`) lists which individuals are sources and which are targets.
 
 ---
 
 ## Pipeline overview
 
 [`workflow/Snakefile`](workflow/Snakefile) combines seven rule modules from
-[`workflow/rules/`](workflow/rules). Each stage has its own `config.yml` section;
-clustering, mixture and window peaks can be switched off.
+[`workflow/rules/`](workflow/rules), each with dedicated sections in the configuration file `config.yml`. Some stages such as clustering, mixture modelling and window peaks are optional and can be switched off.
 
 ```
 Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
@@ -49,65 +60,62 @@ Precomputed IBD segments ({chrom}...ibd.gz)  +  config/individuals.tsv
                            (disabled by default)
 ```
 
-From stage 4 on, everything runs for two kinds of panel:
+From stage 4 / aggregation of IBD onwards, the workflow can run on two types of panels:
 
-- **default**: the built-in hierarchical clustering, one panel at the cut height set by
-  `clustering.base_height` / `gate_height` (e.g. `cluster_h1.0_...`);
-- **custom**: panels listed under `aggregation.panels`, each with its own
-  population definitions and colours (see [Building a custom panel](#building-a-custom-panel)).
+- **default**: If genetic clustering was enabled, a single panel corresponding to the specified configuration
+- **custom**: any number of custom panels listed under `aggregation.panels`, each with their own sample-to-population mapping and colour scheme (see [Custom-panel files](#custom-panel-files-configpanelspanel)).
 
 ---
 
-## Example
+## Ancestry estimation in brief
 
-[`example/`](example) holds a small simulated dataset: 48 individuals on 22 human-sized chromosomes (2.2 MB of IBD
-segments), made of an outgroup `O`, two sources `S1` and `S2`, and an admixed population `X` formed 12 generations ago
-from 60% `S1` and 40% `S2`. `config/` already points at it, so the whole workflow runs unchanged:
+For each **target** sample, the IBD-sharing palette is modelled as a non-negative
+mixture of **source**-population profiles. Two estimators are available
+(`mixture.method`):
 
-```bash
-snakemake --cores 8        # a few minutes; seeds are fixed in config/config.yml
-```
+- **`nnls`**: non-negative least squares (`lsei::pnnls`) with per-chromosome
+  block-jackknife standard errors.
+- **`bayesian`**: a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
+  proposal scaling and an active-source search (spike-and-slab over the source
+  palette). It reports acceptance rate, ESS and R-hat
 
-It clusters the 48 individuals into four clusters, one per population, fits the sources and targets named in
-`config/panels/default/mixture_four_pop.tsv`, and runs the automatic source selection. The Bayesian fit gives X 0.62
-from `S1` and the NNLS fit 0.61, against 0.60 realized; the table of expected results, the clusters and the true
-ancestry of every individual are in [`example/expected/`](example/expected). [`example/README.md`](example/README.md)
-describes the data, the expected output and why the automatic source picker does not model X here.
+`mixture.palette_scale` sets how palettes are scaled before fitting. With `normalized` (default), each palette is divided by its total, so it holds the proportion of an individual's IBD shared with each donor population; a source that carries more total IBD per individual is then slightly over-credited, which can bias the estimates. With `raw`, the sources are mean per-individual palettes in cM, the target is fitted up to a free scale, and the weights are normalized afterwards. `raw` can re-estimate proportions when the sources differ strongly in total IBD, but only for sources of comparable total sharing: a single low-sharing source can take any weight (see [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md#palette-scale)).
+
+Custom mixture model sets are defined using a `mixture_<set>.tsv` file assigning individuals as sources (`group == source`) or targets (`group == target`). Alternatively, the workflow also implements automatically created sets for the clustering panels (not custom panels), using the TVD / neighbour-joining tree (`mixture_auto`, controlled by
+the `mixture.auto_source_*` knobs).
+
+Diagnostics:
+
+- A residual diagnostic flags source populations that act as poor proxies and names
+  the unused population they stand in for. It runs whenever `bayesian` is enabled;
+  `source_flags.tsv` also needs `nnls`, as it reports the disagreement between the
+  two estimators.
+- `res_norm_ex_self` is the residual excluding the target's own cluster, the
+  statistic to compare across targets.
+- Sources are screened for an R scale offset (`source_R_flags.tsv`): R is the mean total IBD per individual that a source emits into the donor panel, and sources whose R is far from the panel median can show deflated (low R) or inflated (high R) weights. A per-target risk tier (`target_R_flags.tsv`) shows how much each estimate rests on such sources.
+- NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`, only with
+  `palette_scale: normalized`).
+
+More detailed descriptions of configutration and output columns can be found in
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables) and the
+interpretation of each diagnostic in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
 ---
 
-## Repository layout
+## Requirements
 
-```
-config/
-  config.yml                     # all workflow parameters (see docs/CONFIGURATION.md)
-  chromosomes.txt                # chromosomes to process, one per line
-  n_markers.tsv                  # per-chromosome marker counts (chrom, n)
-  genome.txt                     # chromosome lengths (chrom, bp)
-  individuals.tsv                # sample sheet (sample_id, label, group)   [EXAMPLE]
-  panels/
-    default/
-      mixture_four_pop.tsv       # sources and targets for the default clustering panel   [EXAMPLE]
-  metadata/                      # input format of build_example_panel.R   [EXAMPLE]
-    sample_info.tsv
-    cluster_info.tsv
-example/                         # the example dataset (see above)         [EXAMPLE]
-  ibd_segments/                  #   one IBD segment file per chromosome
-  simulation/scenario.yaml       #   how it was simulated
-  expected/                      #   clusters, realized ancestry, expected results
-  README.md
-workflow/
-  Snakefile
-  rules/*.smk                    # the 7 pipeline stages
-  scripts/{python,r,awk}/        # step implementations
-docs/
-  CONFIGURATION.md               # full per-knob reference
-  DIAGNOSTICS.md                 # how to read the estimates and diagnostics
-results/                         # all outputs (generated; git-ignored)
-```
+- **Snakemake** (workflow engine).
+- **Command-line tools** on `PATH`: `bedtools`, GNU `datamash`, `gawk`, `gzip`,
+  `sort`.
+- **Python 3** with `pandas` and `numpy`.
+- **R** with:
+  `argparse`, `readr`, `dplyr`, `tidyr`, `purrr`, `tibble`, `stringr`, `rlang`,
+  `data.table`, `ggplot2`, `scales`, `scico`, `grid`, `grDevices`,
+  `future`, `furrr`, `parallelDist`, `fastcluster`, `dynamicTreeCut`,
+  `lsei`, `Rtsne`, `ape`, `phytools`, `data.tree`, `igraph`, `tidygraph`,
+  `ggraph`, `ggtree`, `heatmap3`.
 
-Files marked **[EXAMPLE]** belong to the example dataset or show the required format.
-Replace them with your data (see [Supplying real data](#supplying-real-data)).
+No environment file is provided; install the packages with conda, `renv` or system packages.
 
 ---
 
@@ -121,50 +129,50 @@ with a one-line header (skipped). The workflow reads these columns:
 
 | column | meaning                    |
 |-------:|----------------------------|
-| 1      | sample id (first haplotype owner)  |
-| 2      | sample id (second haplotype owner) |
+| 1      | sample id 1                |
+| 2      | sample id 2                |
 | 3      | chromosome                 |
 | 4      | segment start (bp)         |
 | 5      | segment end (bp)           |
 | 6      | LOD / score                |
 | 9      | segment length (cM)        |
 
-Columns 7–8 are ignored. Both sample ids must appear in `individuals.tsv`.
+These columns are required, at exactly these positions; all other columns are ignored. Both sample ids must appear in `individuals.tsv`. The input file can come from any IBD estimation method. A fast reimplementation of IBDseq generating already properly formated input files is available at https://github.com/martinsikora/ibdseq_rs
 
 ### Sample sheet (`input_data.individuals` → `config/individuals.tsv`)
 
 | column      | meaning |
 |-------------|---------|
 | `sample_id` | must match the ids in the IBD segment files |
-| `label`     | free-text population/date label |
-| `group`     | `cluster_full` (used to build the clustering tree), `cluster_min_dist` (assigned to a cluster afterwards by k-NN vote), or `exclude` |
+| `label`     | free-text population label, used for plotting |
+| `group`     | `cluster_full` (used to build the clustering tree, typically high quality, non-related individuals), `cluster_min_dist` (assigned to a cluster afterwards by k-NN, can include close relatives or poorer quality individuals), or `exclude` |
 
 ### Reference (`ref`)
 
 - `genome`: chromosome-length file (`chrom  length`) used by `bedtools genomecov`.
 - `chromosomes`: the chromosome list (`config/chromosomes.txt`).
 - `marker_file`: per-chromosome marker counts (`config/n_markers.tsv`), used by
-  the mixture model to weight IBD by marker density.
-- `fasta`: reserved; read from the config but not used by any rule.
+  the mixture model as chromosome block sizes for the weighted jackknife standard errors (and to balance the folds of
+  `mixture.cv: k<K>`). If IBDseq is used, typically the number of markers after LD pruning.
 
 ### Custom-panel files (`config/panels/<panel>/`)
 
+A custom panel is defined by setting up a folder `config/panels/<panel>/` listed in `aggregation.panels`, containing the following set of configuration files:
+
 | file                 | columns                          | purpose |
 |----------------------|----------------------------------|---------|
-| `aggregate.tsv`      | `sample_id, pop_id, group`       | maps samples to populations; `group` ∈ `{donor_recipient, recipient}`. A `pop_id` of `exclude` drops the sample. |
-| `color_map.tsv`      | `pop_id, color, fill, shape`     | plotting colours/shapes; its `pop_id` set must match `aggregate.tsv`. Optional (panels without it skip TVD/PCA plots). |
-| `mixture_<set>.tsv`  | `sample_id, group`               | defines one mixture experiment named `<set>`; `group` ∈ `{target, source}`. |
+| `aggregate.tsv`      | `sample_id, pop_id, group`       | maps samples to populations. `pop_id` is the chosen label, one per population or cluster; set it to `exclude` to drop a sample. `group == donor_recipient` marks the individuals that define the populations (typically the well-clustered, unrelated core) and are included in the palette of their `pop_id`. `group == recipient` individuals (relatives, lower-quality samples, anything assigned to a cluster afterwards) do not contribute to the palettes, but still receive one against the populations of all `donor_recipient` individuals. |
+| `color_map.tsv`      | `pop_id, color, fill, shape`     | plotting colours/shapes; its `pop_id` set should match `aggregate.tsv`. Optional; without it the panel gets mixture tables only (no TVD matrix or plots, PCA or mixture plots). |
+| `mixture_<set>.tsv`  | `sample_id, group`               | defines one mixture model set named `<set>`; `group` ∈ `{target, source}`. Multiple set files can be defined per panel. |
 
-The default clustering panels generate their `aggregate.tsv` / `color_map.tsv`
-automatically. For the default panels a mixture set named `auto` is always
-available (sources auto-selected from the TVD tree); add
-`config/panels/default/mixture_<set>.tsv` to define named sets by hand.
+When genetic clustering is enabled, a panel based on the clustering results is automatically created with name based on clustering setting configuration. In this scenario, automatically generated `aggregate.tsv` / `color_map.tsv` files with the clustering results as populations will be created, using `cluster_full` individuals as `donor_recipient` and `cluster_min_dist` as `recipient`. Additionally, an automatic mixture set named `auto` is also generated (sources auto-selected from the TVD tree) and run when `mixture.enabled` is true; add
+`config/panels/default/mixture_<set>.tsv` to additionally define named sets by hand (`default` is the folder for hand-defined sets for the auto-generated clustering panels).
 
 ---
 
 ## Outputs
 
-All outputs are written under `results/` (git-ignored):
+All outputs are written under `results/`:
 
 ```
 results/
@@ -185,20 +193,19 @@ panel name. `<tag>` encodes the distance, transform and agglomeration settings
 
 ---
 
-## Requirements
+## Example dataset
 
-- **Snakemake** (workflow engine).
-- **Command-line tools** on `PATH`: `bedtools`, GNU `datamash`, `gawk`, `gzip`,
-  `sort`.
-- **Python 3** with `pandas` and `numpy`.
-- **R** with:
-  `argparse`, `readr`, `dplyr`, `tidyr`, `purrr`, `tibble`, `stringr`, `rlang`,
-  `data.table`, `ggplot2`, `scales`, `scico`, `grid`, `grDevices`,
-  `future`, `furrr`, `parallelDist`, `fastcluster`, `dynamicTreeCut`,
-  `lsei`, `Rtsne`, `ape`, `phytools`, `data.tree`, `igraph`, `tidygraph`,
-  `ggraph`, `ggtree`, `heatmap3`.
+[`example/`](example) holds a small simulated dataset: 48 individuals on 22 human-sized chromosomes, made of an outgroup `O`, two sources `S1` and `S2`, and an admixed population `X` formed 12 generations ago
+from 60% `S1` and 40% `S2`. To run it through the workflow, use
 
-No environment file is provided; install the packages with conda, `renv` or system packages.
+```bash
+snakemake --cores 8        # a few minutes; seeds are fixed in config/config.yml
+```
+
+This will carry out genetic clustering, and fitting the sources and targets specified in
+`config/panels/default/mixture_four_pop.tsv`, as well as the automatic source selection. The data and the expected output are described in [`example/README.md`](example/README.md). A stage-by-stage
+[walkthrough](docs/walkthrough/README.md) shows the real outputs of this example (clustering, palettes, mixture fits, diagnostics,
+variants to try).
 
 ---
 
@@ -228,6 +235,42 @@ coverage jobs run at the same time.
 
 ---
 
+## Repository layout
+
+```
+config/
+  config.yml                     # all workflow parameters (see docs/CONFIGURATION.md)
+  chromosomes.txt                # chromosomes to process, one per line
+  n_markers.tsv                  # per-chromosome marker counts (chrom, n)
+  genome.txt                     # chromosome lengths (chrom, bp)
+  individuals.tsv                # sample sheet (sample_id, label, group)   [EXAMPLE]
+  panels/
+    default/
+      mixture_four_pop.tsv       # sources and targets for the default clustering panel   [EXAMPLE]
+example/                         # the example dataset (see above)         [EXAMPLE]
+  ibd_segments/                  #   one IBD segment file per chromosome
+  simulation/scenario.yaml       #   how it was simulated
+  expected/                      #   clusters, realized ancestry, expected results
+  results/                       #   curated outputs of one run, shown in the walkthrough
+  variants/                      #   configs for the walkthrough's "try this" runs
+  make_walkthrough.py            #   curates results/ from a run and writes docs/walkthrough/
+  README.md
+workflow/
+  Snakefile
+  rules/*.smk                    # the 7 pipeline stages
+  scripts/{python,r,awk}/        # step implementations
+docs/
+  CONFIGURATION.md               # full per-knob reference
+  DIAGNOSTICS.md                 # how to read the estimates and diagnostics
+  walkthrough/                   # the example, stage by stage, with its real outputs
+results/                         # all outputs generated
+```
+
+Files marked **[EXAMPLE]** belong to the example dataset or show the required format.
+Replace them with your data (see [Supplying real data](#supplying-real-data)).
+
+---
+
 ## Supplying real data
 
 1. Point `input_data.ibd` at your per-chromosome IBD segment files (keep the
@@ -245,71 +288,33 @@ coverage jobs run at the same time.
 
 ---
 
-## Building a custom panel
+## References
 
-A custom panel is the three files under `config/panels/<name>/` described
-above, which you can write by hand. Alternatively,
-[`workflow/scripts/r/build_example_panel.R`](workflow/scripts/r/build_example_panel.R)
-builds `aggregate.tsv` and `color_map.tsv` together, so their `pop_id` sets stay
-identical, from two metadata tables:
+The methods implemented here have been first introduced in Allentoft, Sikora et al. 2024, with further refinements and testing in McColl et al. 2025a, b.
+A manuscript describing the full suite is in preparation; until then, please refer to these studies when citing the
+methods.
 
-- `sample_info.tsv`: `sample_id, cluster_label, cluster_alias, cluster_assignment`
-- `cluster_info.tsv`: `cluster_label, cluster_alias, color, fill, shape`
+- Allentoft ME, Sikora M, Refoyo-Martínez A, et al. Population genomics of post-glacial western Eurasia. *Nature* 625,
+  301-311 (2024).
+- McColl H, Kroonen G, Moreno-Mayar JV, et al. Steppe ancestry in western Eurasia and the spread of the Germanic languages.
+  *bioRxiv* (2025a). doi:10.1101/2024.03.13.584607
+- McColl H, Kroonen G, Pinotti T, Barrie W, Koch J, Ling J, Demoule J-P, Kristiansen K, Sikora M, Willerslev E. Tracing the
+  spread of Celtic languages using ancient genomics. *bioRxiv* (2025b). doi:10.1101/2025.02.28.640770
 
-`config/metadata/` holds placeholder files in this format. Run it on your own tables:
 
-```bash
-Rscript workflow/scripts/r/build_example_panel.R \
-  --sample_info  config/metadata/sample_info.tsv \
-  --cluster_info config/metadata/cluster_info.tsv \
-  --out_dir      config/panels/my_panel
-```
 
----
+**Methods and ideas this workflow was built on**
 
-## Mixture-model notes
+- Lawson DJ, Hellenthal G, Myers S, Falush D. Inference of population structure using dense haplotype data. *PLoS Genetics* 8,
+  e1002453 (2012). (ChromoPainter)
+- Chacón-Duque J-C, Adhikari K, Fuentes-Guajardo M, et al. Latin Americans show wide-spread Converso ancestry and imprint of
+  local Native ancestry on physical appearance. *Nature Communications* 9, 5388 (2018). (SOURCEFIND, on which the Bayesian
+  estimator is modelled)
+- Browning BL, Browning SR. Detecting identity by descent and estimating genotype error rates in sequence data. *American
+  Journal of Human Genetics* 93, 840-851 (2013). (IBDseq)
+- Langfelder P, Zhang B, Horvath S. Defining clusters from a hierarchical cluster tree: the Dynamic Tree Cut package for R.
+  *Bioinformatics* 24, 719-720 (2008).
 
-For each **target** sample, the IBD-sharing profile is modelled as a non-negative
-mixture of **source**-population profiles. Two estimators are available
-(`mixture.method`):
-
-- **`nnls`**: non-negative least squares (`lsei::pnnls`) with per-chromosome
-  block-jackknife standard errors.
-- **`bayesian`**: a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
-  proposal scaling and an active-source search (spike-and-slab over the source
-  palette). It reports acceptance rate, ESS and R-hat; judge convergence on
-  `rhat_median`, as `rhat_max` becomes large for near-zero sources.
-
-`mixture.palette_scale` sets how the profiles are scaled. With `normalized` (default)
-every profile is first divided by its total, which over-credits sources that carry
-more total IBD per individual. With `raw` the sources are mean per-individual profiles
-in cM, the target is fitted up to a free scale and the weights are normalised
-afterwards; use it to re-estimate proportions when the sources differ strongly in
-total IBD, and only with sources of comparable total sharing (a single low-sharing
-source can take any weight, see [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md#palette-scale)).
-
-Sources are listed in a `mixture_<set>.tsv` (`group == source`) or selected
-automatically from the TVD / neighbour-joining tree (`mixture_auto`, controlled by
-the `mixture.auto_source_*` knobs).
-
-Diagnostics:
-
-- A residual diagnostic flags source populations that act as poor proxies and names
-  the unused population they stand in for. It runs whenever `bayesian` is enabled;
-  `source_flags.tsv` also needs `nnls`, as it reports the disagreement between the
-  two estimators.
-- `res_norm_ex_self` is the residual excluding the target's own cluster, the
-  statistic to compare across targets.
-- Sources are screened for an R scale offset (`source_R_flags.tsv`), with a
-  per-target risk tier (`target_R_flags.tsv`).
-- NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`, only with
-  `palette_scale: normalized`).
-
-The output columns are described in
-[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables) and the
-interpretation of each diagnostic in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
-
-See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) for every knob.
 
 ---
 

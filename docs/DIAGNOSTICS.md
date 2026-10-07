@@ -71,9 +71,9 @@ Which file holds what:
   likelihood. `raw` does not support `--cv`, and the workflow stops with a message if
   `mixture.cv` is set together with it.
 
-In the example (see [`example/README.md`](../example/README.md)), S1 emits 9% more total IBD than S2. The 12 admixed X
-individuals have a realized S1 share of 0.595. `normalized` gives them 0.624 (Bayesian) and 0.612 (NNLS) from S1, and `raw`
-gives 0.605 and 0.593.
+In the example (see [`example/README.md`](../example/README.md)), S1 emits 6% more total IBD than S2. The 12 admixed X
+individuals have a realized S1 share of 0.600. `normalized` gives them 0.638 (Bayesian) and 0.626 (NNLS) from S1, and `raw`
+gives 0.625 and 0.614.
 
 **Use `raw` only with sources of comparable total sharing.** Because the scale is free, a source whose palette is far
 smaller than the others (for example a single individual with little detected IBD, with a total below about 1% of the
@@ -87,7 +87,7 @@ the source absorbs weight from any target that has ancestry no source carries. C
 |---|---|
 | `p` | Weight of the source in the target. Sums to 1 over the sources of a target. |
 | `p_median` | Bayesian only: posterior median of the weight of each source, renormalised to sum to 1 over the sources of a target. It differs from `p` (the posterior mean) when the posterior is wide and skewed, typically for sources the data barely support; with few, well-separated candidates the two agree. `p` stays the posterior mean. |
-| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is narrower than the spread between individuals (in the example 0.006 for S1, against 0.026 between the X individuals). With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior; the weights are unchanged. |
+| `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is narrower than the spread between individuals (in the example 0.006 for S1, against 0.053 between the X individuals). With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior; the weights are unchanged. |
 | `active_sources_median` | Bayesian: median number of sources with weight above `mixture.active_eps` (default 1e-4) per posterior draw. |
 | `selected_sources_n` | Bayesian: number of sources passed to the continuous sampler after the active-source search. Equal to all sources when the search is off or `max_active_sources` covers them all. |
 

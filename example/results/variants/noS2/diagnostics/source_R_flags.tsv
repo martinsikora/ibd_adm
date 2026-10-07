@@ -1,0 +1,5 @@
+# panel=h1.0/noS2  n_sources=2  median_R_excl_self=739.1  WARN=2.5x  SEVERE=10x
+# tier = scale offset vs this panel's median; NOT a statement about source quality
+component	n	R_excl_self	R_genomewide	fold_vs_median	direction	flag
+C0	12	145.7	2179.0	5.07	underestimated	WARN
+C6	12	1332.5	2948.6	1.80	-	ok
