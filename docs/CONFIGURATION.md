@@ -1,6 +1,6 @@
 # Configuration reference
 
-Every knob lives in [`config/config.yml`](../config/config.yml) and is read by
+Worflow configuration is defined in [`config/config.yml`](../config/config.yml) and is read by
 [`workflow/Snakefile`](../workflow/Snakefile).
 Values are validated at load time: an out-of-range enum or range raises a
 `ValueError` before any job runs. The default column is the code fallback used
@@ -59,13 +59,13 @@ Stage 3 (`cluster_ibd.smk`): hierarchical clustering of individuals. Disable wit
 |-----|---------|----------------|----------|
 | `clustering.enabled` | `true` | bool | Master switch for the default (auto-clustering) pipeline. |
 | `clustering.clust_method` | `ward.D2` | hclust method | Agglomeration method; part of the output cache tag. |
-| `clustering.dist_method` | `euclidean` | distance metric | Distance on the IBD feature vectors; part of the cache tag. |
+| `clustering.dist_method` | `cosine` | distance metric | Distance on the IBD feature vectors; part of the cache tag. |
 | `clustering.normalize_ibd_vectors` | `false` | bool | L2-normalize each sample's row vector before the distance. |
 | `clustering.standardize_features` | `false` | bool | Z-score each feature (centre and scale). Keep this off with cosine distance: centring turns a low row total into a negative offset in every coordinate, so all low-sharing samples point the same way and cluster together regardless of ancestry. Mutually exclusive with `scale_features`. |
-| `clustering.scale_features` | `false` | bool | Divide each feature by its SD without centring. This up-weights low-variance donor columns, as the z-score does, but avoids the offset. Together with the two keys above it sets the transform tag (`raw`/`norm`/`scale`/`scalenorm`/`zscore`/`zscorenorm`). |
-| `clustering.cl_size` | `2` | int | `dynamicTreeCut` minimum cluster size (`minClusterSize`; the package default is 20). Smaller values keep very small groups as clusters, larger values leave more samples unassigned. |
+| `clustering.scale_features` | `true` (`false` if `standardize_features` is `true`) | bool | Divide each feature by its SD without centring. This up-weights low-variance donor columns, as the z-score does, but avoids the offset. Together with the two keys above it sets the transform tag (`raw`/`norm`/`scale`/`scalenorm`/`zscore`/`zscorenorm`). |
+| `clustering.cl_size` | `3` | int | `dynamicTreeCut` minimum cluster size (`minClusterSize`; the package default is 20). Smaller values keep very small groups as clusters, larger values leave more samples unassigned. |
 | `clustering.deep_split` | `3` | int (0–4) | `dynamicTreeCut` `deepSplit`: how readily a branch below the cut height is split into separate clusters. 0 splits only clearly bimodal branches, higher values also split off cohesive sub-branches, giving more and smaller clusters at the same height. The `dynamicTreeCut` package default is 1, which the example config uses; the code fallback when the key is omitted is 3. In the example, 1 gives the four populations as four clusters for any cut height from 0.5 to 1.2, while 3 needs a height of 1.5 or more (see [`example/README.md`](../example/README.md)). |
-| `clustering.knn` | `1` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
+| `clustering.knn` | `7` | int | k for the k-NN majority vote that assigns `cluster_min_dist` samples to a cluster (`1` = single nearest neighbour). |
 | `clustering.threads` | `24` | int | Threads for the matrix/distance/clustering rules. |
 | `clustering.default_panel` | `default` (fallback) | string | Name of the default panel whose clusters seed aggregation. |
 | `clustering.base_height` | *(required)* | number | Coarse (fallback) cut height of the default clustering panel. Required when `clustering.enabled` is true; the workflow raises an error at load time if this or `gate_height` is unset. |

@@ -46,11 +46,11 @@ parser$add_argument("-s", "--sample_file", dest = "sample_file",
 parser$add_argument("--out_tsv", dest = "out_file_tsv", help = "Output clusters.tsv")
 parser$add_argument("--height", dest = "height", type = "double",
   help = "Cut height for adaptive tree cutting")
-parser$add_argument("--cl_size", dest = "cl_size", type = "integer", default = 2L,
+parser$add_argument("--cl_size", dest = "cl_size", type = "integer", default = 3L,
   help = "Minimum cluster size for adaptive tree cutting [default %(default)s]")
 parser$add_argument("--deep_split", dest = "deep_split", type = "integer",
   default = 3L, help = "Deep split parameter for adaptive tree cutting [default %(default)s]")
-parser$add_argument("--knn", dest = "knn", type = "integer", default = 1L,
+parser$add_argument("--knn", dest = "knn", type = "integer", default = 7L,
   help = paste("k for k-NN majority-vote assignment of cluster_min_dist samples;",
     "1 = original single-nearest-neighbour rule [default %(default)s]"))
 args <- parser$parse_args()

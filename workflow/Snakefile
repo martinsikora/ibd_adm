@@ -35,7 +35,7 @@ MASK_SD = MASK_PARAMS.get("ibd_sd", 5)
 
 CLUSTER_ENABLED = bool(config.get("clustering", {}).get("enabled", True))
 CLUSTER_THREADS = int(config.get("clustering", {}).get("threads", 24))
-CLUSTER_DIST_METHOD = str(config.get("clustering", {}).get("dist_method", "euclidean"))
+CLUSTER_DIST_METHOD = str(config.get("clustering", {}).get("dist_method", "cosine"))
 CLUSTER_CLUST_METHOD = str(config.get("clustering", {}).get("clust_method", "ward.D2"))
 CLUSTER_NORMALIZE_IBD_VECTORS = bool(
     config.get("clustering", {}).get("normalize_ibd_vectors", False)
@@ -44,16 +44,16 @@ CLUSTER_STANDARDIZE_FEATURES = bool(
     config.get("clustering", {}).get("standardize_features", False)
 )
 CLUSTER_SCALE_FEATURES = bool(
-    config.get("clustering", {}).get("scale_features", False)
+    config.get("clustering", {}).get("scale_features", not CLUSTER_STANDARDIZE_FEATURES)
 )
 if CLUSTER_STANDARDIZE_FEATURES and CLUSTER_SCALE_FEATURES:
     raise ValueError(
         "clustering.standardize_features and clustering.scale_features are "
         "mutually exclusive (centre+scale vs scale-only)"
     )
-CLUSTER_CL_SIZE = int(config.get("clustering", {}).get("cl_size", 2))
+CLUSTER_CL_SIZE = int(config.get("clustering", {}).get("cl_size", 3))
 CLUSTER_DEEP_SPLIT = int(config.get("clustering", {}).get("deep_split", 3))
-CLUSTER_KNN = int(config.get("clustering", {}).get("knn", 1))
+CLUSTER_KNN = int(config.get("clustering", {}).get("knn", 7))
 CLUSTER_DEFAULT_PANEL = config.get("clustering", {}).get("default_panel", "default")
 
 # ---- base / gate height: there is exactly ONE default clustering panel -----

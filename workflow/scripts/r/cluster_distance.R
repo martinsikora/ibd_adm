@@ -36,7 +36,7 @@ parser$add_argument("--in", dest = "in_file",
 parser$add_argument("--out", dest = "out_file",
   help = "Output distance-matrix .rds (m_d)")
 parser$add_argument("--dist_method", dest = "dist_method", type = "character",
-  default = "euclidean", help = "Distance method for parDist [default %(default)s]")
+  default = "cosine", help = "Distance method for parDist [default %(default)s]")
 parser$add_argument("--normalize_ibd_vectors", dest = "normalize_ibd_vectors",
   action = "store_true", default = FALSE,
   help = "L2-normalize per-sample IBD vectors before distance calculation")
