@@ -39,34 +39,36 @@ def mix_diag_prefix(mix_dir, mix_panel):
     return f"{mix_dir}/{mix_panel}/diagnostics/{PREFIX}.residual_diagnostic"
 
 
-def mixmodel_extra_args(method):
+def mixmodel_extra_args(method, panel):
+    """mixmodel_ibd.R options for `method` on `panel` ("default" or a custom panel's name)."""
+    f = mix_fit(panel)
     args = f"--method {method}"
-    args += f" --palette_scale {MIX_PALETTE_SCALE}"
-    if MIX_SEED >= 0:
-        args += f" --seed {MIX_SEED}"
-    if method == "nnls" and MIX_CV != "none":
-        args += f" --cv {MIX_CV}"
+    args += f" --palette_scale {f['palette_scale']}"
+    if f["seed"] >= 0:
+        args += f" --seed {f['seed']}"
+    if method == "nnls" and f["cv"] != "none":
+        args += f" --cv {f['cv']}"
     if method == "bayesian":
         args += (
-            f" --mcmc_iter {MIX_MCMC_ITER}"
-            f" --burnin {MIX_BURNIN}"
-            f" --thin {MIX_THIN}"
-            f" --proposal_scale {MIX_PROPOSAL_SCALE}"
-            f" --mcmc_chains {MIX_MCMC_CHAINS}"
-            f" --adapt_burnin_frac {MIX_ADAPT_BURNIN_FRAC}"
-            f" --adapt_interval {MIX_ADAPT_INTERVAL}"
-            f" --adapt_target_accept {MIX_ADAPT_TARGET_ACCEPT}"
-            f" --local_move_prob {MIX_LOCAL_MOVE_PROB}"
-            f" --mean_active_sources {MIX_MEAN_ACTIVE_SOURCES}"
-            f" --active_eps {MIX_ACTIVE_EPS}"
-            f" --hybrid_active_search {MIX_HYBRID_ACTIVE_SEARCH}"
-            f" --se_genome_length_cm {MIX_SE_GENOME_LENGTH_CM}"
-            f" --max_active_sources {MIX_MAX_ACTIVE_SOURCES}"
-            f" --active_search_slots {MIX_ACTIVE_SEARCH_SLOTS}"
-            f" --active_search_iter {MIX_ACTIVE_SEARCH_ITER}"
-            f" --active_search_burnin {MIX_ACTIVE_SEARCH_BURNIN}"
-            f" --active_search_thin {MIX_ACTIVE_SEARCH_THIN}"
-            f" --active_search_jump_prob {MIX_ACTIVE_SEARCH_JUMP_PROB}"
+            f" --mcmc_iter {f['mcmc_iter']}"
+            f" --burnin {f['burnin']}"
+            f" --thin {f['thin']}"
+            f" --proposal_scale {f['proposal_scale']}"
+            f" --mcmc_chains {f['mcmc_chains']}"
+            f" --adapt_burnin_frac {f['adapt_burnin_frac']}"
+            f" --adapt_interval {f['adapt_interval']}"
+            f" --adapt_target_accept {f['adapt_target_accept']}"
+            f" --local_move_prob {f['local_move_prob']}"
+            f" --mean_active_sources {f['mean_active_sources']}"
+            f" --active_eps {f['active_eps']}"
+            f" --hybrid_active_search {f['hybrid_active_search']}"
+            f" --se_genome_length_cm {f['se_genome_length_cm']}"
+            f" --max_active_sources {f['max_active_sources']}"
+            f" --active_search_slots {f['active_search_slots']}"
+            f" --active_search_iter {f['active_search_iter']}"
+            f" --active_search_burnin {f['active_search_burnin']}"
+            f" --active_search_thin {f['active_search_thin']}"
+            f" --active_search_jump_prob {f['active_search_jump_prob']}"
         )
     return args
 
@@ -241,7 +243,7 @@ if MIX_ENABLED and MIX_MARKER_FILE and ENABLE_DEFAULT_PIPELINE:
         priority:
             90
         params:
-            extra_args=lambda wc: mixmodel_extra_args(wc.mix_method)
+            extra_args=lambda wc: mixmodel_extra_args(wc.mix_method, "default")
         shell:
             """
             mkdir -p $(dirname {output})
@@ -287,7 +289,7 @@ if MIX_ENABLED and MIX_MARKER_FILE and CUSTOM_PANELS:
         priority:
             90
         params:
-            extra_args=lambda wc: mixmodel_extra_args(wc.mix_method)
+            extra_args=lambda wc: mixmodel_extra_args(wc.mix_method, wc.agg_panel)
         shell:
             """
             mkdir -p {PANELS_DIR}/{wildcards.agg_panel}/mixmodel/{wildcards.mix_panel}/tables
@@ -537,7 +539,7 @@ if MIX_DIAG_ENABLED and CUSTOM_PANELS:
         output:
             risk=f"{panel_mix_dir('{agg_panel}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
         params:
-            pscale=MIX_PALETTE_SCALE,
+            pscale=lambda wc: mix_fit(wc.agg_panel)["palette_scale"],
             gate=MIX_R_FIT_GATE,
             empty=MIX_R_EMPTY_FOLD,
             pmin=MIX_R_TARGET_PMIN,
@@ -652,7 +654,7 @@ if MIX_DIAG_ENABLED and ENABLE_DEFAULT_PIPELINE and DEFAULT_MIX_PANELS:
         output:
             risk=f"{cluster_mix_dir('{height}')}/{{mix_panel}}/diagnostics/{PREFIX}.target_R_flags.tsv",
         params:
-            pscale=MIX_PALETTE_SCALE,
+            pscale=mix_fit("default")["palette_scale"],
             gate=MIX_R_FIT_GATE,
             empty=MIX_R_EMPTY_FOLD,
             pmin=MIX_R_TARGET_PMIN,

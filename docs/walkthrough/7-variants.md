@@ -1,7 +1,7 @@
 # 7. Variants to try
 
-Each variant changes one thing. The outputs are shipped in `example/results/variants/`. The raw-palette variant overwrites the
-mixture results, so run it in a copy of the repository; the missing-source variant only adds an output directory.
+Each variant changes one setting. The outputs are shipped in `example/results/variants/`. The raw-palette variant overwrites the
+mixture results, so run it in a copy of the repository; the missing-source variant only adds an output directory. The `deep_split` variant is on [page 2](2-clustering.md).
 
 
 ## Raw palettes

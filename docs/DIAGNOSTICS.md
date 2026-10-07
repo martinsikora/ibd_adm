@@ -57,7 +57,7 @@ Which file holds what:
 `mixture.palette_scale` (command line `--palette_scale`) has two settings.
 
 - `normalized` (default): every palette is divided by its own total before fitting. A
-  mixture of normalised palettes weights a source by its ancestry share times its total
+  mixture of normalized palettes weights a source by its ancestry share times its total
   IBD per individual, so a source that carries more total IBD is over-credited. The size
   of this effect depends on the ratio of the total IBD of the sources over the donor
   panel, and changes with the donor set. Report it as a possible bias of the weights.
@@ -66,7 +66,7 @@ Which file holds what:
   within-cluster entry over the n - 1 other cluster members and its between-cluster
   entries over a random subset of n - 1 of the n donors, so source individuals and
   targets are compared on the same number of donors. The target palette is fitted up to a
-  free overall scale and the weights are normalised afterwards, so they are ancestry
+  free overall scale and the weights are normalized afterwards, so they are ancestry
   fractions. In the Bayesian model the prediction is rescaled to sum to 1 before the
   likelihood. `raw` does not support `--cv`, and the workflow stops with a message if
   `mixture.cv` is set together with it.
@@ -86,7 +86,7 @@ the source absorbs weight from any target that has ancestry no source carries. C
 | column | meaning |
 |---|---|
 | `p` | Weight of the source in the target. Sums to 1 over the sources of a target. |
-| `p_median` | Bayesian only: posterior median of the weight of each source, renormalised to sum to 1 over the sources of a target. It differs from `p` (the posterior mean) when the posterior is wide and skewed, typically for sources the data barely support; with few, well-separated candidates the two agree. `p` stays the posterior mean. |
+| `p_median` | Bayesian only: posterior median of the weight of each source, renormalized to sum to 1 over the sources of a target. It differs from `p` (the posterior mean) when the posterior is wide and skewed, typically for sources the data barely support; with few, well-separated candidates the two agree. `p` stays the posterior mean. |
 | `se` | NNLS: leave-one-chromosome-out jackknife, weighted by chromosome size. Bayesian: posterior standard deviation. By default it comes from a likelihood with a fixed 20000 observations and is narrower than the spread between individuals (in the example 0.006 for S1, against 0.053 between the X individuals). With `mixture.two_stage_se: true` (and `mixture.genome_length_cm` set to the genome length), a second fit on the same sources gives a wider posterior; the weights are unchanged. |
 | `active_sources_median` | Bayesian: median number of sources with weight above `mixture.active_eps` (default 1e-4) per posterior draw. |
 | `selected_sources_n` | Bayesian: number of sources passed to the continuous sampler after the active-source search. Equal to all sources when the search is off or `max_active_sources` covers them all. |
@@ -96,7 +96,7 @@ How to read them:
 - A weight is only meaningful relative to its `se`. Treat `p / se` below about 3 as
   indistinguishable from zero for reporting purposes. Sources the Bayesian fit did not
   select keep a small `p / se` (the prior leaves them slightly above zero), while selected
-  sources are at 3 or more. That gap is what you look for.
+  sources are at 3 or more. 
 - Bayesian weights are sparse. A source with a tiny `p` and a tiny `se` is not a small
   contribution measured precisely; it is a source the sampler mostly switched off.
 - NNLS weights are exactly 0 for sources the fit does not need, so its `se` for those is
@@ -105,12 +105,7 @@ How to read them:
 - The two estimators can disagree when sources are similar to each other, because
   collinear sources trade weight. Compare the sum over a group of related sources
   instead of each member. See [Collinear sources](#common-problems).
-- The Bayesian `se` of the default fit is too narrow: it is smaller than the spread of the
-  estimates between individuals, so intervals from it undercover. `mixture.two_stage_se: true`
-  (second fit with `mixture.genome_length_cm` observations) gives a wider `se`. The weights are
-  the same in both cases; the genome-length fit is used only for the `se`.
-- The standard errors reflect sampling noise in the IBD, not error from a missing or
-  mis-specified source.
+
 
 ## Residuals
 
@@ -122,7 +117,7 @@ fractions, so smaller is better and values are only comparable within a panel.
 |---|---|
 | `res_norm` | Bayesian: RMSE over all donors. NNLS: the plain L2 norm from the solver, larger than the RMSE by the square root of the number of donors. Not comparable between estimators. |
 | `res_norm_rmse` | The same figure on the RMSE scale for both estimators. Use this to compare NNLS and Bayesian. |
-| `res_norm_ex_self` | RMSE after dropping the target's own-cluster donor row and renormalising both vectors. `NA` if the target's cluster is not a donor. |
+| `res_norm_ex_self` | RMSE after dropping the target's own-cluster donor row and renormalizing both vectors. `NA` if the target's cluster is not a donor. |
 | `self_share` | Fraction of the target's palette that lies in its own cluster row. |
 | `self_is_source` | Whether the target's own cluster is also a source. |
 
@@ -139,7 +134,7 @@ Reading them:
 - A large `res_norm_ex_self` for a group of targets, with a structured leftover, points to a
   missing source. The [residual diagnostic](#residual-diagnostic) looks for it.
 - Adding a source can only lower the in-sample NNLS residual, so a small improvement alone
-  does not justify keeping a source. Use the hold-out CV to check whether it generalises.
+  does not justify keeping a source. Use the hold-out CV to check whether it generalizes.
 
 ## Sampler diagnostics (Bayesian only)
 
@@ -171,8 +166,7 @@ Reading them:
 - **What to do about poor sampling.** More iterations (`mcmc_iter`), more chains, a longer
   burn-in, or fewer sources. Persistent disagreement between chains with a well-fitted
   residual can mean several nearly equivalent source combinations.
-- Convergence is separate from correctness. A well-converged chain can still describe a
-  mis-specified model.
+
 
 ## Source R flags
 
@@ -211,7 +205,7 @@ Reading it:
 `diagnostics/<prefix>.target_R_flags.tsv`, one row per target.
 
 Shows how much of each target's estimate rests on flagged sources. It uses the R-corrected
-share `q = (p / R)`, renormalised over the sources, because tiering on the raw `p` would
+share `q = (p / R)`, renormalized over the sources, because tiering on the raw `p` would
 miss the worst cases (a badly deflated source has a small `p`). Dividing by R over-corrects
 as an estimator, so `q_flagged` is an upper bound on what the flagged sources could
 contribute. It is a screen, not a corrected proportion.
@@ -235,8 +229,7 @@ contribution; when ancestry that no source carries is missing, the misfit lands 
 The fit gate separates the two only partly, so many such targets come out `MODERATE`.
 
 Reading it: `HIGH` means a `SEVERE` source could plausibly carry a real contribution that
-the raw weights hide, so treat that target's proportions on those sources as a direction,
-not a value. `none` means the flagged sources do not matter for this target. Most targets
+the raw weights hide, so treat that target's proportions on those sources as a direction only. `none` means the flagged sources do not matter for this target. Most targets
 in a panel without extreme-R sources come out as `none`.
 
 ## Residual diagnostic

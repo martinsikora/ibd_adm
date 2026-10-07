@@ -77,7 +77,7 @@ mixture of **source**-population profiles. Two estimators are available
   block-jackknife standard errors.
 - **`bayesian`**: a SOURCEFIND-style MCMC with a Dirichlet proposal, adaptive
   proposal scaling and an active-source search (spike-and-slab over the source
-  palette). It reports acceptance rate, ESS and R-hat
+  palette). It reports acceptance rate, ESS and R-hat.
 
 `mixture.palette_scale` sets how palettes are scaled before fitting. With `normalized` (default), each palette is divided by its total, so it holds the proportion of an individual's IBD shared with each donor population; a source that carries more total IBD per individual is then slightly over-credited, which can bias the estimates. With `raw`, the sources are mean per-individual palettes in cM, the target is fitted up to a free scale, and the weights are normalized afterwards. `raw` can re-estimate proportions when the sources differ strongly in total IBD, but only for sources of comparable total sharing: a single low-sharing source can take any weight (see [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md#palette-scale)).
 
@@ -96,7 +96,7 @@ Diagnostics:
 - NNLS fits can be evaluated by chromosome hold-out CV (`mixture.cv`, only with
   `palette_scale: normalized`).
 
-More detailed descriptions of configutration and output columns can be found in
+More detailed descriptions of configuration and output columns can be found in
 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md#mixture-output-tables) and the
 interpretation of each diagnostic in [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
@@ -137,7 +137,7 @@ with a one-line header (skipped). The workflow reads these columns:
 | 6      | LOD / score                |
 | 9      | segment length (cM)        |
 
-These columns are required, at exactly these positions; all other columns are ignored. Both sample ids must appear in `individuals.tsv`. The input file can come from any IBD estimation method. A fast reimplementation of IBDseq generating already properly formated input files is available at https://github.com/martinsikora/ibdseq_rs
+These columns are required, at exactly these positions; all other columns are ignored. Both sample ids must appear in `individuals.tsv`. The input file can come from any IBD estimation method. A fast reimplementation of IBDseq generating already properly formatted input files is available at https://github.com/martinsikora/ibdseq_rs
 
 ### Sample sheet (`input_data.individuals` → `config/individuals.tsv`)
 
@@ -164,6 +164,7 @@ A custom panel is defined by setting up a folder `config/panels/<panel>/` listed
 | `aggregate.tsv`      | `sample_id, pop_id, group`       | maps samples to populations. `pop_id` is the chosen label, one per population or cluster; set it to `exclude` to drop a sample. `group == donor_recipient` marks the individuals that define the populations (typically the well-clustered, unrelated core) and are included in the palette of their `pop_id`. `group == recipient` individuals (relatives, lower-quality samples, anything assigned to a cluster afterwards) do not contribute to the palettes, but still receive one against the populations of all `donor_recipient` individuals. |
 | `color_map.tsv`      | `pop_id, color, fill, shape`     | plotting colours/shapes; its `pop_id` set should match `aggregate.tsv`. Optional; without it the panel gets mixture tables only (no TVD matrix or plots, PCA or mixture plots). |
 | `mixture_<set>.tsv`  | `sample_id, group`               | defines one mixture model set named `<set>`; `group` ∈ `{target, source}`. Multiple set files can be defined per panel. |
+| `panel.yml`          | `include_recipient_only_pops`, `include_pops`, `exclude_pops`, `mixture:` | optional per-panel settings. The three pop options treat recipient-only populations (for example single-individual clusters, recipient-only by design as they can't provide within-cluster sharing) as full clusters in the TVD tree and plots and drop catch-all bins such as `unassigned`; they replace the panel's entry in `aggregation.full_cluster_pop_overrides`. The `mixture:` block overrides how models are fitted for this panel (for example `palette_scale`, `mean_active_sources`, `seed`), merged over the global `mixture.*` values. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md). |
 
 When genetic clustering is enabled, a panel based on the clustering results is automatically created with name based on clustering setting configuration. In this scenario, automatically generated `aggregate.tsv` / `color_map.tsv` files with the clustering results as populations will be created, using `cluster_full` individuals as `donor_recipient` and `cluster_min_dist` as `recipient`. Additionally, an automatic mixture set named `auto` is also generated (sources auto-selected from the TVD tree) and run when `mixture.enabled` is true; add
 `config/panels/default/mixture_<set>.tsv` to additionally define named sets by hand (`default` is the folder for hand-defined sets for the auto-generated clustering panels).

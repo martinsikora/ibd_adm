@@ -217,13 +217,11 @@ write_tsv(cl_res, paste0(OUT, ".cluster_residuals.tsv"))
 ## How distal each source is from the target mass: mean TVD between the source
 ## palette and the target-cluster palettes, weighted by target sample count.
 ##
-## This replaces a regex over source_pop ("UpperPal|Mesolithic|Jomon|...") that
-## was used to decide which sources were "deep" enough to flag. That test only
-## worked on panels whose pop_id embeds a descriptive alias: on any default
-## panel the pop_id is a bare cluster label (C5_2_1_0), the regex never matched,
-## and every flag column came out FALSE. Distality is read off the same
-## palette geometry the diagnostic already uses, so it behaves identically
-## whatever the labelling scheme.
+## Distality is read off the palette geometry, not off the population labels:
+## a test on descriptive names in pop_id would not work on a default panel,
+## where the pop_id is a bare cluster label (C5_2_1_0) and no flag would ever
+## fire. The geometry is the same one the diagnostic already uses, so it behaves
+## identically whatever the labelling scheme.
 tgt_w <- smap |>
   mutate(b = sub("_r$", "", pop_id)) |>
   count(b) |>

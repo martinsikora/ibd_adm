@@ -1,17 +1,18 @@
 # Configuration reference
 
-Worflow configuration is defined in [`config/config.yml`](../config/config.yml) and is read by
+Workflow configuration is defined in [`config/config.yml`](../config/config.yml) and is read by
 [`workflow/Snakefile`](../workflow/Snakefile).
 Values are validated at load time: an out-of-range enum or range raises a
 `ValueError` before any job runs. The default column is the code fallback used
-when a key is omitted; the shipped `config/config.yml` overrides several of them.
+when a key is omitted, or `(required)`; the shipped `config/config.yml` overrides several of them.
 
 For how to interpret the output columns and diagnostics, see [`DIAGNOSTICS.md`](DIAGNOSTICS.md).
 
 Contents: [Top level](#top-level) · [`ref`](#ref) · [`input_data`](#input_data) ·
 [`masking`](#masking) · [`clustering`](#clustering) ·
 [`aggregation`](#aggregation) · [colour-map knobs](#colour-map-knobs) ·
-[`mixture`](#mixture) · [auto source selection](#auto-source-selection) ·
+[`mixture`](#mixture) · [per-panel model settings](#per-panel-model-settings-panelyml) ·
+[auto source selection](#auto-source-selection) ·
 [`ibd_window_peaks`](#ibd_window_peaks) · [Enable/disable & derived tags](#enabledisable-flags-and-derived-tags)
 
 ---
@@ -20,23 +21,23 @@ Contents: [Top level](#top-level) · [`ref`](#ref) · [`input_data`](#input_data
 
 | key | default | type / allowed | controls |
 |-----|---------|----------------|----------|
-| `prefix` | `example_dataset` | string | Dataset/run name used verbatim as `PREFIX` in **every** output filename. Keep it filesystem-safe. |
-| `tmpdir` | `/path/to/scratch/ibd_adm` | path or unset | If set, every shell command runs with `TMPDIR` exported here (dir created first). Omit to use the system temp dir. |
+| `prefix` | *(required)* | string | Dataset/run name used verbatim as `PREFIX` in **every** output filename. Keep it filesystem-safe. |
+| `tmpdir` | unset | path | If set, every shell command runs with `TMPDIR` exported here (dir created first). Omit to use the system temp dir. |
 
 ## `ref`
 
 | key | default | type | controls |
 |-----|---------|------|----------|
-| `ref.genome` | `/path/to/reference/genome.genome` | path | Chromosome-length file (`chrom  length`) passed to `bedtools genomecov` during masking. Must cover every chromosome in `ref.chromosomes`. |
-| `ref.chromosomes` | `config/chromosomes.txt` | path | Plain list of chromosomes (one per line) → `CHROMS`; fills the `{chrom}` wildcard everywhere. Empty file → error. |
+| `ref.genome` | *(required)* | path | Chromosome-length file (`chrom  length`) passed to `bedtools genomecov` during masking. Must cover every chromosome in `ref.chromosomes`. |
+| `ref.chromosomes` | *(required)* | path | Plain list of chromosomes (one per line) → `CHROMS`; fills the `{chrom}` wildcard everywhere. Empty file → error. |
 | `ref.marker_file` | `config/n_markers.tsv` | path | Per-chromosome marker counts (`chrom  n`); used as block sizes for the weighted leave-one-chromosome-out jackknife SEs and to balance the folds of `mixture.cv: k<K>`. Fallback for `mixture.marker_file`. |
 
 ## `input_data`
 
 | key | default | type | controls |
 |-----|---------|------|----------|
-| `input_data.ibd` | `resources/ibd_segments/{chrom}.example_dataset.ibdseq.ibd.gz` | path template | Per-chromosome precomputed IBD segments; must keep the `{chrom}` wildcard. Column layout consumed: `$1,$2`=sample ids, `$3`=chrom, `$4,$5`=start,end (bp), `$6`=LOD, `$9`=length (cM). |
-| `input_data.individuals` | `config/individuals.tsv` | path | Sample sheet (`sample_id, label, group`); also the sample set for the default clustering panel. |
+| `input_data.ibd` | *(required)* | path template | Per-chromosome precomputed IBD segments; must keep the `{chrom}` wildcard. Column layout consumed: `$1,$2`=sample ids, `$3`=chrom, `$4,$5`=start,end (bp), `$6`=LOD, `$9`=length (cM). |
+| `input_data.individuals` | *(required)* | path | Sample sheet (`sample_id, label, group`); also the sample set for the default clustering panel. |
 
 ## `masking`
 
@@ -78,12 +79,12 @@ Stage 4 (`aggregate_ibd.smk`): per-population IBD sharing + TVD + colour map.
 
 | key | default | type / allowed | controls |
 |-----|---------|----------------|----------|
-| `aggregation.max_concurrent_ibd_jobs` | `8` | int | Global-resource cap on concurrent `aggregate_ibd` jobs. |
+| `aggregation.max_concurrent_ibd_jobs` | unset (no cap); `8` in `config/config.yml` | int ≥ 1 | Cap on concurrent `aggregate_ibd` jobs within one Snakemake run (a Snakemake global resource, enforced with `--cores`). |
 | `aggregation.seed` | unset | int | Seed of the random donor subset (`n - 1` of the `n` donors of each population) used for the between-population entries of the palettes. Unset: a new draw per chromosome and per run. Set it for reproducible palettes. |
 | `aggregation.ibd_params.min_l_cm` | `1` | number | Min segment length (cM) for the masked total-IBD pass (stage 2 `ibd_tot`). |
 | `aggregation.ibd_params.max_l_cm` | `16` | number | Max segment length (cM). |
 | `aggregation.ibd_params.min_lod` | `3` | number | Min LOD/score. |
-| `aggregation.full_cluster_pop_overrides` | `{}` | mapping: panel name → options | Per-panel overrides, keyed by a custom panel's directory name under `config/panels/` or by `default` for the raw clustering panel. A panel that is not listed gets none. Do not set this globally, because a pop_id can mean different things in different panels. Options are listed below the table. |
+| `aggregation.full_cluster_pop_overrides` | `{}` | mapping: panel name → options | Per-panel overrides, keyed by a custom panel's name under `config/panels/` or by `default` for the raw clustering panel. The same options can also be given in `config/panels/<panel>/panel.yml` instead (`config/panels/default/panel.yml` for the default clustering panel); if that file sets any of these options they replace the entry here, the two are not merged. A panel without settings gets none. Options are listed below the table. |
 | `aggregation.panels` | `[]` | list of names | Custom panels; each must be a `config/panels/<name>/` directory. Drives custom aggregation, mixture, PCA, and peaks. Omit/empty to use only the default clustering panels. |
 
 Options of `aggregation.full_cluster_pop_overrides` (per panel):
@@ -96,7 +97,7 @@ The same pop_id can mean different things in different panels. For example, `una
 
 ### Colour-map knobs
 
-Consumed by `make_color_map_mds.R` (`default_color_map` rule) to derive a
+Used by `make_color_map_mds.R` (`default_color_map` rule) to derive a
 perceptually spread colour + shape map from a 3-D embedding of the TVD matrix.
 
 | key | default | type / allowed | controls |
@@ -108,8 +109,8 @@ perceptually spread colour + shape map from a 3-D embedding of the TVD matrix.
 | `aggregation.color_tsne_chroma_max` | `130` | number | Max HCL chroma (**must exceed** the min). |
 | `aggregation.color_tsne_lum_min` | `15` | number | Min HCL luminance. |
 | `aggregation.color_tsne_lum_max` | `95` | number | Max HCL luminance (**must exceed** the min). |
-| `aggregation.color_tsne_gamma_c` | `0.7` | number > 0 | Chroma gamma. |
-| `aggregation.color_tsne_gamma_l` | `0.8` | number > 0 | Luminance gamma (tuned for `lc_spread: rank`; use `0.8` with `raw`). |
+| `aggregation.color_tsne_gamma_c` | `0.7` | number > 0 | Chroma gamma. The shipped config uses `0.35`, tuned for `color_tsne_lc_spread: rank`. |
+| `aggregation.color_tsne_gamma_l` | `0.8` | number > 0 | Luminance gamma. The shipped config uses `0.6`, tuned for `color_tsne_lc_spread: rank`. |
 | `aggregation.color_tsne_hue_scale` | `1.15` | number | Hue scaling factor. |
 | `aggregation.color_tsne_hue_rotate` | `25` | degrees | Hue rotation. |
 | `aggregation.color_tsne_hue_spread` | `range` | `raw` \| `range` \| `rank` | Hue spreading mode. |
@@ -137,16 +138,40 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 | `mixture.cv` | `none` | `none` \| `evenodd` \| `loco` \| `k<K>` \| `test:<chroms>` | Chromosome hold-out CV for the NNLS fits: `evenodd` fits even and scores odd chromosomes and the reverse, `loco` holds out each chromosome in turn, `k<K>` uses K marker-balanced blocks, `test:1,3-5` holds out the listed chromosomes. Writes `<out>.cv.tsv`; the main table is unchanged. Not applied to Bayesian fits; run those by hand with `--cv evenodd --cv_only 1`. See "Chromosome hold-out CV" below. |
 | `mixture.marker_file` | (falls back to `ref.marker_file`) | path | Per-chromosome marker counts (jackknife block sizes, CV fold balancing). |
 
+### Per-panel model settings (`panel.yml`)
+
+The settings that control how a model is fitted can differ between panels. Put them in a `mixture:` block of
+`config/panels/<panel>/panel.yml` (`config/panels/default/panel.yml` for the generated clustering panel); they apply to
+every mixture set of that panel and are merged over the global `mixture.*` values key by key, so a panel only lists what
+differs:
+
+```yaml
+# config/panels/my_panel/panel.yml
+mixture:
+  palette_scale: raw
+  mean_active_sources: 3
+```
+
+Allowed keys: `palette_scale`, `seed`, `cv`, `two_stage_se`, `genome_length_cm`, the Bayesian sampler settings (`mcmc_iter`,
+`burnin`, `thin`, `proposal_scale`, `mcmc_chains`, `adapt_burnin_frac`, `adapt_interval`, `adapt_target_accept`,
+`local_move_prob`) and the active-source settings (`mean_active_sources`, `active_eps`, `hybrid_active_search`,
+`max_active_sources`, `active_search_slots`, `active_search_iter`, `active_search_burnin`, `active_search_thin`,
+`active_search_jump_prob`). The other `mixture.*` keys (`method`, `threads`, `marker_file`, the R-flag and diagnostic
+thresholds, `auto_*`) decide which outputs exist or how they are summarized and stay global; `panel.yml` rejects them.
+The R-flag diagnostics of a panel use that panel's `palette_scale`. The same rules apply as for the global keys (for
+example `cv` needs `palette_scale: normalized`). The same file also holds the pop options of
+`aggregation.full_cluster_pop_overrides`.
+
 ### Mixture output tables
 
 `mixmodel/<set>/tables/*.tsv` has one row per target x source. Columns that are not obvious:
 
 | column | meaning |
 |---|---|
-| `p`, `se` | Mixture weight and its standard error (NNLS: per-chromosome block jackknife; Bayesian: posterior). `p` is an **IBD share**, not a genome share; see the source R flag below. |
+| `p`, `se` | Mixture weight and its standard error (NNLS: per-chromosome block jackknife; Bayesian: posterior). |
 | `res_norm` | Fit residual. **Not comparable between estimators**: Bayesian is an RMSE, NNLS is a plain L2 norm (larger by sqrt of the number of donors). |
 | `res_norm_rmse` | The same figure on the RMSE scale for both estimators. |
-| `res_norm_ex_self` | RMSE after dropping the target's own-cluster donor row and renormalising both vectors. Use it to compare fits across targets: a large endogamous cohort has a dominant own-cluster row that inflates `res_norm`. `NA` if the target's cluster is not a donor. |
+| `res_norm_ex_self` | RMSE after dropping the target's own-cluster donor row and renormalizing both vectors. Use it to compare fits across targets: a large endogamous cohort has a dominant own-cluster row that inflates `res_norm`. `NA` if the target's cluster is not a donor. |
 | `self_share` | Fraction of the target's palette in its own cluster row. |
 | `self_is_source` | Whether that cluster is itself a source. If TRUE the model can fit the own-cluster column, so `res_norm_ex_self` measures the fit away from home instead of the part of the palette no source can reach. |
 | `rhat_median`, `rhat_max` | Chain convergence. Judge it on `rhat_median` and `ess_*`. `rhat_max` becomes large for sources at the simplex corner (near-zero weight) without indicating a problem, and is `Inf` when chains are frozen at different values. `NA` for NNLS rows. |
@@ -154,7 +179,7 @@ Stage 5 (`mixmodel_ibd.smk`): admixture / mixture modelling. Disable with
 
 **Source R flags** (`diagnostics/<prefix>.source_R_flags.tsv`) mark sources whose total emitted IBD R is far from the panel median. A low R deflates a source's proportions and a high R inflates them. The flag is relative to the panel, is computed before any fit, and is never a reason to drop a source. It gives the direction of a possible scale offset but not its size. See `workflow/scripts/awk/mixmodel_source_r_flags.awk`.
 
-**Target R risk** (`diagnostics/<prefix>.target_R_flags.tsv`) shows, for each target, how much of its estimate rests on sources flagged in `source_R_flags.tsv`. It is computed from the Bayesian table and the source flags, with no extra IBD pass. The tier uses the R-corrected share `q = (p / R)`, renormalised over the sources. It uses this share because a source with a low R has a deflated raw `p`, so tiering on `p` would miss the worst cases. Dividing by R over-corrects as an estimator, so `q_flagged` is an upper bound on what the flagged sources could contribute. It is not a corrected proportion.
+**Target R risk** (`diagnostics/<prefix>.target_R_flags.tsv`) shows, for each target, how much of its estimate rests on sources flagged in `source_R_flags.tsv`. It is computed from the Bayesian table and the source flags, with no extra IBD pass. The tier uses the R-corrected share `q = (p / R)`, renormalized over the sources. It uses this share because a source with a low R has a deflated raw `p`, so tiering on `p` would miss the worst cases. Dividing by R over-corrects as an estimator, so `q_flagged` is an upper bound on what the flagged sources could contribute. It is not a corrected proportion.
 
 | column | meaning |
 |---|---|
@@ -262,8 +287,9 @@ peaks. **Disabled by default.**
 | `ibd_window_peaks.min_cluster_n` | `6` | int | Min cluster size to include. |
 | `ibd_window_peaks.contrib_top_n` | `5` | int | Top-N contributing populations reported. |
 | `ibd_window_peaks.point_size` | `0.8` | number | Plot point size. |
-| `ibd_window_peaks.max_concurrent_coverage_jobs` | `2` | int | Global-resource cap on coverage jobs. |
-| `ibd_window_peaks.panels` | (falls back to `aggregation.panels`) | list | Panels to scan. |
+| `ibd_window_peaks.max_concurrent_coverage_jobs` | unset (no cap); `2` in `config/config.yml` | int ≥ 1 | Cap on concurrent coverage jobs within one Snakemake run (a Snakemake global resource, enforced with `--cores`). |
+| `ibd_window_peaks.panels` | (falls back to `aggregation.panels`) | list | Custom panels to scan. |
+| `ibd_window_peaks.default_panels` | `true` | bool | Also scan the generated clustering panel (when `clustering.enabled` is true). |
 | `ibd_window_peaks.min_l_cm` / `min_lod` | (fall back to `aggregation.ibd_params`) | number | Segment filters for the scan. |
 
 ---
@@ -279,7 +305,7 @@ peaks. **Disabled by default.**
 - Clustering intermediates are cached under
   `results/cluster_cache/<tag>/`, where the tag is
   `d<dist_method>_n<transform>_m<clust_method>` (e.g.
-  `dcosine_nzscore_mward_D2`). Changing `dist_method`, the feature transforms,
+  `dcosine_nscale_mward_D2`). Changing `dist_method`, the feature transforms,
   or `clust_method` writes to a **new** cache directory instead of overwriting,
   and the generated panel is likewise named `cluster_h<base_height>_<tag>`
   (plain) or `cluster_h<base_height>g<gate_height>_<tag>` (gated).
@@ -298,7 +324,9 @@ peaks. **Disabled by default.**
 - `mixture.auto_source_min_tree_dist_quantile` ∈ [0, 1]
 - `mixture.auto_source_max_per_broad_clade` ≥ 1; `..._min_cluster_size` ≥ 1
 - `clustering.standardize_features` and `clustering.scale_features` are mutually exclusive
+- `mixture.palette_scale` ∈ {`raw`, `normalized`}; `mixture.cv` needs `palette_scale: normalized`; `mixture.genome_length_cm` > 0 when `mixture.two_stage_se` is true
 - `clustering.base_height`/`gate_height`: both required whenever `clustering.enabled` is true; both numeric; `gate_height` ≤ `base_height`; `min_sharing` ≥ 0 (checked only when they differ)
-- `aggregation.full_cluster_pop_overrides.<panel>.include_pops`/`exclude_pops`: lists of pop_ids containing no commas or quotes
+- `aggregation.full_cluster_pop_overrides.<panel>` and `config/panels/<panel>/panel.yml`: only the keys `include_recipient_only_pops`, `include_pops`, `exclude_pops` (plus `mixture:` in `panel.yml`); the two lists contain no commas or quotes
+- `config/panels/<panel>/panel.yml` `mixture:`: only the per-panel keys listed under "Per-panel model settings"; `palette_scale` ∈ {`raw`, `normalized`}; `cv` needs `palette_scale: normalized`
 - `mixture.diag_sink_strata` ≥ 1; `diag_sink_min_r` ∈ (0, 1]; `diag_sink_min_n` ≥ 3; `diag_sink_min_p` ∈ [0, 1]; `diag_sink_min_gap` ∈ [0, 2]
 - `ibd_window_peaks.norm_mode` ∈ {`none`, `pop_size`}

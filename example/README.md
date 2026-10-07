@@ -1,7 +1,7 @@
 # Four-population example
 
 A small simulated dataset that runs through the whole workflow in a few minutes on a laptop-sized machine:
-48 individuals, 22 human-length chromosomes, 2.2 MB of IBD segments.
+48 individuals, 22 human-length chromosomes, 2.1 MB of IBD segments.
 
 ```
         O   S1  S2   X        O: outgroup, split 120 generations ago
@@ -14,7 +14,6 @@ A small simulated dataset that runs through the whole workflow in a few minutes 
 |---|---|---|
 | O, S1, S2, X (admixed) | 12 each | 2000 |
 
-X has the same size as the other populations; it is a separate cluster because of its ancestry, a mixture of S1 and S2.
 
 The true ancestry of the 12 X individuals, from the simulated genealogies, averages 0.600 S1 and 0.400 S2
 (`expected/realized_ancestry.tsv`). `simulation/scenario.yaml` is the scenario file (generated with the simulator's
@@ -66,7 +65,7 @@ individuals). Number of clusters (the four true populations are four clusters):
 | 3 | 12 | 12 | 6 | 4 |
 
 With the default, any height from 0.5 to 1.2 gives the four populations; the example uses 1.0. Larger
-`deep_split` (3 is used for the large worldwide analyses) splits each population into several sub-clusters here and
+`deep_split` (for example 3) splits each population into several sub-clusters here and
 needs a height of 1.5 or more to give four. Finer clusters are wanted when they correspond to real sub-populations.
 
 ## What to expect for `four_pop`
@@ -97,5 +96,5 @@ refitting the population-level palettes:
 
 The workflow also builds an automatic panel (`mixmodel/auto/`). On this dataset its picker chooses O, S1 and S2 as sources and
 leaves X as the target, so the result is the same as for `four_pop`. The automatic picker is a convenience, not a guarantee: it
-takes one source per top-level clade and does not know which populations are admixed. For a real analysis, check the picked
+takes one source per top-level clade and screens out populations that look like a mixture of the others, but it does not know which populations you want as targets. For a real analysis, check the picked
 sources (`mixmodel/panels/mixture_auto.tsv`), and prefer a hand-written mixture file like `four_pop` when you know your sources.

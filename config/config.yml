@@ -3,8 +3,7 @@
 #
 # Every knob below is read by workflow/Snakefile. See docs/CONFIGURATION.md for
 # a full per-knob reference (defaults, allowed values, and which stage/script
-# consumes each one). Paths shown as /path/to/... are placeholders you must edit
-# before running on real data.
+# consumes each one).
 # =============================================================================
 
 # Run/dataset name. Used verbatim as the PREFIX in every output filename, e.g.
@@ -105,7 +104,9 @@ aggregation:
   #
   # Scoped PER PANEL -- keyed by panel name (a custom panel's directory name
   # under config/panels/, or the literal "default" for the raw clustering
-  # panel). A pop_id does not mean the same thing in every panel: in a
+  # panel). The same keys can instead go in config/panels/<panel>/panel.yml
+  # (config/panels/default/panel.yml for the clustering panel); that file, if
+  # present, replaces the entry here. A pop_id does not mean the same thing in every panel: in a
   # manually curated panel "unassigned" can be a deliberate, wholly-recipient
   # catch-all bin; in the raw default clustering panel the identical pop_id is
   # just cut_tree's ordinary terminal-cluster label and is typically mostly
@@ -125,8 +126,8 @@ aggregation:
   color_tsne_lum_min: 15
   color_tsne_lum_max: 95
   # gammas below are tuned for the rank-spread chroma/luminance (see
-  # color_tsne_lc_spread); with the min-max default, 0.5 / 0.8 are the
-  # equivalent starting values.
+  # color_tsne_lc_spread); with the min-max spread (the code default) the
+  # defaults 0.7 / 0.8 apply.
   color_tsne_gamma_c: 0.35
   color_tsne_gamma_l: 0.6
   color_tsne_hue_scale: 0.9
@@ -146,6 +147,8 @@ aggregation:
     # (none in this example: the sources and targets are given in config/panels/default/mixture_four_pop.tsv)
 
 mixture:
+  # The model-fit settings below (seed, cv, palette_scale, the sampler and active-source settings) can be
+  # overridden per panel in a `mixture:` block of config/panels/<panel>/panel.yml; see docs/CONFIGURATION.md.
   enabled: true
   method: both
   # Fixed seed for both estimators (negative = unseeded), so the example gives the same numbers each run.
@@ -156,8 +159,8 @@ mixture:
   # future multisession workers per run_models job; models parallelize across
   # target samples (one target/chain is single-threaded)
   threads: 8
-  auto_k_min: 15
-  auto_k_max: 20
+  auto_k_min: 2
+  auto_k_max: 10
   # source picker: tree_spread | farthest | cluster_medoids | differentiated |
   #   differentiated_spread | differentiated_unadmixed.
   #   differentiated_spread partitions the TVD/NJ tree into clades balanced by
@@ -172,13 +175,13 @@ mixture:
   auto_source_pick_method: differentiated_unadmixed
   auto_source_broad_k: 0
   auto_source_max_per_broad_clade: 1
-  auto_source_min_tree_dist_quantile: 0.75
-  auto_source_label_prefix_parts: 2
-  auto_source_max_per_label_prefix: 1
+  auto_source_min_tree_dist_quantile: 0.0
+  auto_source_label_prefix_parts: 0
+  auto_source_max_per_label_prefix: 0
   # differentiated / differentiated_spread knobs:
   #   min_cluster_size: drop singleton/low-support tips (long branch may be noise)
   #   relative_pendant: score pendant length relative to root-to-tip depth
-  auto_source_min_cluster_size: 3
+  auto_source_min_cluster_size: 1
   auto_source_relative_pendant: false
   # differentiated_unadmixed knobs: slack quantile for the triangle test (lower
   # = stricter about calling a population admixed), and how much drift counts
@@ -236,7 +239,7 @@ mixture:
   max_active_sources: 0
   ## normalized (default): every palette sums to 1; it over-credits sources that carry more total IBD per individual.
   ## raw: sources are mean per-individual palettes in cM, the target is fitted up to a free scale and the weights are
-  ## normalised afterwards. Use it to re-estimate proportions when the sources differ strongly in total IBD, and only
+  ## normalized afterwards. Use it to re-estimate proportions when the sources differ strongly in total IBD, and only
   ## with sources of comparable total sharing: a single low-sharing source can take any weight. raw does not support --cv.
   palette_scale: normalized
   active_search_slots: 200

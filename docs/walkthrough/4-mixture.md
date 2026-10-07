@@ -55,6 +55,8 @@ other X individuals, which no source explains; the fit spreads it over S1 and S2
 default `palette_scale: normalized` a source is weighted by its ancestry share times its total IBD per individual, so a source
 with more IBD per individual (S1 here, 6% more than S2) is slightly over-credited. [Page 7](7-variants.md) refits with raw palettes.
 
+The own-cluster effect is exaggerated in this example: X is a small, recently founded and strongly drifted population, and the panel has only four populations, so a large share of its sharing is within X. In larger datasets with many populations most targets share a much smaller part of their IBD with their own cluster, and the bias from this is usually small. Strongly endogamous cohorts are the exception and can still have a large `self_share`.
+
 ## Knobs
 
 `mixture.method` (`nnls`, `bayesian`, `both`), `mixture.seed`, `mixture.palette_scale`, `mixture.mean_active_sources`,

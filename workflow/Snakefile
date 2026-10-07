@@ -27,9 +27,9 @@ INDIVIDUALS = config["input_data"]["individuals"]
 GENOME = config["ref"]["genome"]
 
 MASK_PARAMS = config.get("masking", {}).get("ibd_params", {})
-MASK_MIN_L = MASK_PARAMS.get("min_l_cm", 0)
-MASK_MAX_L = MASK_PARAMS.get("max_l_cm", 999)
-MASK_MIN_LOD = MASK_PARAMS.get("min_lod", 0)
+MASK_MIN_L = MASK_PARAMS.get("min_l_cm", 2)
+MASK_MAX_L = MASK_PARAMS.get("max_l_cm", 16)
+MASK_MIN_LOD = MASK_PARAMS.get("min_lod", 3)
 MASK_TRIM = MASK_PARAMS.get("ibd_trim", 0.05)
 MASK_SD = MASK_PARAMS.get("ibd_sd", 5)
 
@@ -172,28 +172,75 @@ CUSTOM_PANELS = config.get("aggregation", {}).get("panels") or []
 # deliberate, wholly-recipient catch-all bin; in the raw default clustering
 # panel the identical pop_id is just cut_tree's ordinary terminal-cluster label
 # and is mostly donor_recipient -- excluding it there would silently drop a real
-# cluster from that panel's TVD tree. A panel not listed in full_cluster_pop_overrides
-# gets no override at all.
+# cluster from that panel's TVD tree. A panel with no settings gets no override.
+#
+# A panel's settings come from config/panels/<panel>/panel.yml if that file
+# sets them ("default" is the folder of the generated clustering panel),
+# otherwise from aggregation.full_cluster_pop_overrides.<panel> in the root
+# config. If panel.yml has any of the three keys below, they replace the root
+# entry (the two are not merged). panel.yml may also carry a `mixture:` block
+# with per-panel model-fit settings, see mix_fit() below.
+import yaml
+
 _AGG_CFG = config.get("aggregation", {})
 _FULL_CLUSTER_POP_OVERRIDES = _AGG_CFG.get("full_cluster_pop_overrides") or {}
 if not isinstance(_FULL_CLUSTER_POP_OVERRIDES, dict):
     raise ValueError("aggregation.full_cluster_pop_overrides must be a mapping of panel name -> options")
-for _panel_key, _panel_cfg in _FULL_CLUSTER_POP_OVERRIDES.items():
-    _panel_cfg = _panel_cfg or {}
+_POP_OVERRIDE_KEYS = ("include_recipient_only_pops", "include_pops", "exclude_pops")
+_PANEL_YML_KEYS = _POP_OVERRIDE_KEYS + ("mixture",)
+_PANEL_YML_CACHE = {}
+
+
+def _panel_yml(panel):
+    """Parsed config/panels/<panel>/panel.yml ({} if absent), checked for unknown keys."""
+    if panel not in _PANEL_YML_CACHE:
+        f = os.path.join(PANELS_CFG_DIR, panel, "panel.yml")
+        cfg = {}
+        if os.path.exists(f):
+            with open(f) as fh:
+                cfg = yaml.safe_load(fh) or {}
+            if not isinstance(cfg, dict):
+                raise ValueError(f"{f} must be a mapping with keys: {', '.join(_PANEL_YML_KEYS)}")
+            unknown = sorted(set(cfg) - set(_PANEL_YML_KEYS))
+            if unknown:
+                raise ValueError(f"{f}: unknown key(s) {', '.join(map(str, unknown))}; allowed: {', '.join(_PANEL_YML_KEYS)}")
+        _PANEL_YML_CACHE[panel] = cfg
+    return _PANEL_YML_CACHE[panel]
+
+
+def _check_pop_override(cfg, where):
+    if not isinstance(cfg, dict):
+        raise ValueError(f"{where} must be a mapping with keys: {', '.join(_POP_OVERRIDE_KEYS)}")
+    unknown = sorted(set(cfg) - set(_POP_OVERRIDE_KEYS))
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) {', '.join(map(str, unknown))}; allowed: {', '.join(_POP_OVERRIDE_KEYS)}")
     for _k in ("include_pops", "exclude_pops"):
-        _v = _panel_cfg.get(_k) or []
+        _v = cfg.get(_k) or []
         if not isinstance(_v, list) or any("," in str(x) or "'" in str(x) for x in _v):
-            raise ValueError(
-                f"aggregation.full_cluster_pop_overrides.{_panel_key}.{_k} must be a YAML "
-                "list of pop_ids containing no commas or quotes"
-            )
+            raise ValueError(f"{where}.{_k} must be a YAML list of pop_ids containing no commas or quotes")
+    return cfg
+
+
+def _panel_pop_override(panel):
+    f = _panel_yml(panel)
+    if any(k in f for k in _POP_OVERRIDE_KEYS):
+        return _check_pop_override({k: f[k] for k in _POP_OVERRIDE_KEYS if k in f},
+                                   os.path.join(PANELS_CFG_DIR, panel, "panel.yml"))
+    return _check_pop_override(_FULL_CLUSTER_POP_OVERRIDES.get(panel) or {},
+                               f"aggregation.full_cluster_pop_overrides.{panel}")
+
+
+# validate every root entry and every panel file up front, not at first use
+for _panel_key in _FULL_CLUSTER_POP_OVERRIDES:
+    _panel_pop_override(_panel_key)
+for _panel_key in ["default", *(config.get("aggregation", {}).get("panels") or [])]:
+    _panel_pop_override(_panel_key)
 
 
 def full_cluster_pop_flags(panel):
     """Extra tvd_matrix.py/make_mix_sample_map.py flags for `panel` (e.g. "default",
-    or a custom panel's directory name). Panels absent from full_cluster_pop_overrides get no
-    flags at all."""
-    cfg = _FULL_CLUSTER_POP_OVERRIDES.get(panel) or {}
+    or a custom panel's directory name). Panels without settings get no flags at all."""
+    cfg = _panel_pop_override(panel)
     include_pops = cfg.get("include_pops") or []
     exclude_pops = cfg.get("exclude_pops") or []
     parts = []
@@ -207,9 +254,9 @@ def full_cluster_pop_flags(panel):
 
 
 AGG_PARAMS = config.get("aggregation", {}).get("ibd_params", {})
-AGG_MIN_L = AGG_PARAMS.get("min_l_cm", 0)
-AGG_MAX_L = AGG_PARAMS.get("max_l_cm", 999)
-AGG_MIN_LOD = AGG_PARAMS.get("min_lod", 0)
+AGG_MIN_L = AGG_PARAMS.get("min_l_cm", 1)
+AGG_MAX_L = AGG_PARAMS.get("max_l_cm", 16)
+AGG_MIN_LOD = AGG_PARAMS.get("min_lod", 3)
 AGG_MAX_CONCURRENT_IBD_JOBS = config.get("aggregation", {}).get("max_concurrent_ibd_jobs")
 if AGG_MAX_CONCURRENT_IBD_JOBS is None:
     AGG_MAX_CONCURRENT_IBD_JOBS = sys.maxsize
@@ -228,7 +275,7 @@ COLOR_TSNE_GAMMA_L = float(config.get("aggregation", {}).get("color_tsne_gamma_l
 COLOR_TSNE_HUE_SCALE = float(config.get("aggregation", {}).get("color_tsne_hue_scale", 1.15))
 COLOR_TSNE_HUE_ROTATE = float(config.get("aggregation", {}).get("color_tsne_hue_rotate", 25))
 COLOR_TSNE_HUE_SPREAD = str(config.get("aggregation", {}).get("color_tsne_hue_spread", "range"))
-COLOR_MAP_SHAPES = config.get("aggregation", {}).get("color_map_shapes", list(range(16)))
+COLOR_MAP_SHAPES = config.get("aggregation", {}).get("color_map_shapes", list(range(20)))
 if not isinstance(COLOR_MAP_SHAPES, list) or not COLOR_MAP_SHAPES:
     raise ValueError("aggregation.color_map_shapes must be a non-empty list of shape ids")
 try:
@@ -402,6 +449,66 @@ MIX_ACTIVE_SEARCH_ITER = int(config.get("mixture", {}).get("active_search_iter",
 MIX_ACTIVE_SEARCH_BURNIN = int(config.get("mixture", {}).get("active_search_burnin", 500))
 MIX_ACTIVE_SEARCH_THIN = int(config.get("mixture", {}).get("active_search_thin", 10))
 MIX_ACTIVE_SEARCH_JUMP_PROB = float(config.get("mixture", {}).get("active_search_jump_prob", 0.1))
+
+## Model-fit settings that a panel can override in its panel.yml `mixture:` block.
+## key: (coercion, global value). Everything else under `mixture` (method, threads,
+## marker_file, diagnostics, auto_*) stays global because it decides which outputs
+## exist or how they are summarised.
+_MIX_FIT_KEYS = {
+    "palette_scale": (str, MIX_PALETTE_SCALE),
+    "seed": (int, MIX_SEED),
+    "cv": (str, MIX_CV),
+    "mcmc_iter": (lambda v: v, MIX_MCMC_ITER),
+    "burnin": (lambda v: v, MIX_BURNIN),
+    "thin": (lambda v: v, MIX_THIN),
+    "proposal_scale": (lambda v: v, MIX_PROPOSAL_SCALE),
+    "mcmc_chains": (int, MIX_MCMC_CHAINS),
+    "adapt_burnin_frac": (float, MIX_ADAPT_BURNIN_FRAC),
+    "adapt_interval": (int, MIX_ADAPT_INTERVAL),
+    "adapt_target_accept": (float, MIX_ADAPT_TARGET_ACCEPT),
+    "local_move_prob": (float, MIX_LOCAL_MOVE_PROB),
+    "mean_active_sources": (float, MIX_MEAN_ACTIVE_SOURCES),
+    "active_eps": (float, MIX_ACTIVE_EPS),
+    "hybrid_active_search": (int, MIX_HYBRID_ACTIVE_SEARCH),
+    "two_stage_se": (bool, MIX_TWO_STAGE_SE),
+    "genome_length_cm": (float, MIX_GENOME_LENGTH_CM),
+    "max_active_sources": (int, MIX_MAX_ACTIVE_SOURCES),
+    "active_search_slots": (int, MIX_ACTIVE_SEARCH_SLOTS),
+    "active_search_iter": (int, MIX_ACTIVE_SEARCH_ITER),
+    "active_search_burnin": (int, MIX_ACTIVE_SEARCH_BURNIN),
+    "active_search_thin": (int, MIX_ACTIVE_SEARCH_THIN),
+    "active_search_jump_prob": (float, MIX_ACTIVE_SEARCH_JUMP_PROB),
+}
+_MIX_FIT_CACHE = {}
+
+
+def mix_fit(panel):
+    """Model-fit settings of `panel`: the global `mixture.*` values, with the keys in the
+    `mixture:` block of config/panels/<panel>/panel.yml (if any) merged over them, key by key."""
+    if panel not in _MIX_FIT_CACHE:
+        where = os.path.join(PANELS_CFG_DIR, panel, "panel.yml")
+        block = _panel_yml(panel).get("mixture") or {}
+        if not isinstance(block, dict):
+            raise ValueError(f"{where}: `mixture` must be a mapping")
+        unknown = sorted(set(block) - set(_MIX_FIT_KEYS))
+        if unknown:
+            raise ValueError(f"{where}: mixture key(s) {', '.join(map(str, unknown))} cannot be set per panel; "
+                             f"allowed: {', '.join(_MIX_FIT_KEYS)}")
+        out = {k: (conv(block[k]) if k in block else glob) for k, (conv, glob) in _MIX_FIT_KEYS.items()}
+        if out["palette_scale"] not in ("raw", "normalized"):
+            raise ValueError(f"{where}: mixture.palette_scale must be raw or normalized")
+        if out["palette_scale"] == "raw" and out["cv"] != "none":
+            raise ValueError(f"{where}: mixture.cv needs palette_scale: normalized (chromosome hold-out is not implemented for the raw palette scale)")
+        if out["two_stage_se"] and out["genome_length_cm"] <= 0:
+            raise ValueError(f"{where}: mixture.genome_length_cm must be > 0 when two_stage_se is true")
+        out["se_genome_length_cm"] = out["genome_length_cm"] if out["two_stage_se"] else 0.0
+        _MIX_FIT_CACHE[panel] = out
+    return _MIX_FIT_CACHE[panel]
+
+
+# validate the panel files up front
+for _panel_key in ["default", *CUSTOM_PANELS]:
+    mix_fit(_panel_key)
 MIX_AUTO_K_MIN = int(config.get("mixture", {}).get("auto_k_min", 2))
 MIX_AUTO_K_MAX = int(config.get("mixture", {}).get("auto_k_max", 10))
 if MIX_AUTO_K_MIN < 2 or MIX_AUTO_K_MAX < 2 or MIX_AUTO_K_MIN > MIX_AUTO_K_MAX:
@@ -462,13 +569,13 @@ if MIX_AUTO_SOURCE_DRIFT_WEIGHT < 0:
 
 PEAK_CFG = config.get("ibd_window_peaks", {})
 PEAK_ENABLED = bool(PEAK_CFG.get("enabled", False))
-PEAK_WINDOW_SIZE = int(PEAK_CFG.get("window_size", 10000))
+PEAK_WINDOW_SIZE = int(PEAK_CFG.get("window_size", 100000))
 PEAK_NORM_MODE = str(PEAK_CFG.get("norm_mode", "pop_size"))
-PEAK_METHODS = [str(x) for x in (PEAK_CFG.get("methods") or ["kl"])]
+PEAK_METHODS = [str(x) for x in (PEAK_CFG.get("methods") or ["kl", "jsd", "chi2", "max_mad_z"])]
 PEAK_TAIL_PROB = float(PEAK_CFG.get("tail_prob", 0.01))
 PEAK_THRESHOLD_SCOPE = str(PEAK_CFG.get("threshold_scope", "genome"))
 PEAK_MIN_WINDOW_TOTAL = float(PEAK_CFG.get("min_window_total", 0))
-PEAK_MIN_CLUSTER_N = int(PEAK_CFG.get("min_cluster_n", 4))
+PEAK_MIN_CLUSTER_N = int(PEAK_CFG.get("min_cluster_n", 6))
 PEAK_CONTRIB_TOP_N = int(PEAK_CFG.get("contrib_top_n", 5))
 PEAK_POINT_SIZE = float(PEAK_CFG.get("point_size", 0.8))
 PEAK_MAX_CONCURRENT_COVERAGE_JOBS = PEAK_CFG.get("max_concurrent_coverage_jobs")
@@ -485,8 +592,8 @@ if _peak_custom_panels_cfg is None:
 else:
     PEAK_CUSTOM_PANELS = [p for p in _peak_custom_panels_cfg if p in CUSTOM_PANELS]
 PEAK_DEFAULT_PANELS = bool(PEAK_CFG.get("default_panels", True))
-PEAK_IBD_MIN_L = float(PEAK_CFG.get("min_l_cm", config.get("aggregation", {}).get("ibd_params", {}).get("min_l_cm", 0)))
-PEAK_IBD_MIN_LOD = float(PEAK_CFG.get("min_lod", config.get("aggregation", {}).get("ibd_params", {}).get("min_lod", 0)))
+PEAK_IBD_MIN_L = float(PEAK_CFG.get("min_l_cm", AGG_MIN_L))
+PEAK_IBD_MIN_LOD = float(PEAK_CFG.get("min_lod", AGG_MIN_LOD))
 if PEAK_NORM_MODE not in ("none", "pop_size"):
     raise ValueError("ibd_window_peaks.norm_mode must be one of: none, pop_size")
 
