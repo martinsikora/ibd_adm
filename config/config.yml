@@ -224,6 +224,10 @@ mixture:
   burnin: 20000
   thin: 5
   proposal_scale: 200
+  ## Dirichlet prior on the source weights (symmetric concentration). 0.05 (default): sparse, a few sources carry the weight; 0.5: diffuse, with ~30 sources most of them get a small weight; 1: flat
+  alpha_prior: 0.05
+  ## number of observations the likelihood is multiplied by (log-likelihood = n_copies * sum(y log q)); fewer = wider posterior and more pull towards the prior
+  n_copies: 20000
   mcmc_chains: 1
   adapt_burnin_frac: 0.0
   adapt_interval: 200

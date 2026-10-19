@@ -425,6 +425,8 @@ MIX_MCMC_ITER = config.get("mixture", {}).get("mcmc_iter", 200000)
 MIX_BURNIN = config.get("mixture", {}).get("burnin", 20000)
 MIX_THIN = config.get("mixture", {}).get("thin", 5)
 MIX_PROPOSAL_SCALE = config.get("mixture", {}).get("proposal_scale", 200)
+MIX_ALPHA_PRIOR = float(config.get("mixture", {}).get("alpha_prior", 0.05))
+MIX_N_COPIES = float(config.get("mixture", {}).get("n_copies", 20000))
 MIX_MCMC_CHAINS = int(config.get("mixture", {}).get("mcmc_chains", 1))
 MIX_ADAPT_BURNIN_FRAC = float(config.get("mixture", {}).get("adapt_burnin_frac", 0.0))
 MIX_ADAPT_INTERVAL = int(config.get("mixture", {}).get("adapt_interval", 200))
@@ -462,6 +464,8 @@ _MIX_FIT_KEYS = {
     "burnin": (lambda v: v, MIX_BURNIN),
     "thin": (lambda v: v, MIX_THIN),
     "proposal_scale": (lambda v: v, MIX_PROPOSAL_SCALE),
+    "alpha_prior": (float, MIX_ALPHA_PRIOR),
+    "n_copies": (float, MIX_N_COPIES),
     "mcmc_chains": (int, MIX_MCMC_CHAINS),
     "adapt_burnin_frac": (float, MIX_ADAPT_BURNIN_FRAC),
     "adapt_interval": (int, MIX_ADAPT_INTERVAL),

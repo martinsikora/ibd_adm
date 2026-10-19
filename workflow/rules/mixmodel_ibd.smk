@@ -54,6 +54,8 @@ def mixmodel_extra_args(method, panel):
             f" --burnin {f['burnin']}"
             f" --thin {f['thin']}"
             f" --proposal_scale {f['proposal_scale']}"
+            f" --alpha_prior {f['alpha_prior']}"
+            f" --n_copies {f['n_copies']}"
             f" --mcmc_chains {f['mcmc_chains']}"
             f" --adapt_burnin_frac {f['adapt_burnin_frac']}"
             f" --adapt_interval {f['adapt_interval']}"

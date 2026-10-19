@@ -323,7 +323,7 @@ infer_sourcefind <- function(
     n_iter = 4000,
     burnin = 1000,
     thin = 10,
-    alpha_prior = 0.5,
+    alpha_prior = 0.05,
     proposal_scale = 200,
     n_copies = 20000,
     raw_scale = FALSE,
@@ -678,6 +678,32 @@ parser$add_argument("--local_move_prob",
   type = "double",
   default = 0.8,
   help = "Probability of local pairwise mass-transfer proposal [default %(default)s]"
+)
+
+parser$add_argument("--alpha_prior",
+  action = "store",
+  dest = "alpha_prior",
+  type = "double",
+  default = 0.05,
+  help = paste(
+    "Concentration of the symmetric Dirichlet prior on the source weights. Below 1 it favours sparse mixtures",
+    "(few sources with weight, the rest near zero); 1 is flat on the simplex; above 1 pulls towards equal weights.",
+    "Dependence is on the number of sources: with 30 sources alpha 0.5 still expects about 19 sources above 1%,",
+    "alpha 0.05 about 6. [default %(default)s]"
+  )
+)
+
+parser$add_argument("--n_copies",
+  action = "store",
+  dest = "n_copies",
+  type = "double",
+  default = 20000,
+  help = paste(
+    "Number of observations the likelihood is multiplied by (the target palette is a proportion vector, so the",
+    "log-likelihood is n_copies * sum(y * log(q))). It sets how strongly the data outweigh the prior and the width",
+    "of the posterior: fewer copies = wider posterior, more pull towards the prior. Also used by the active-source search.",
+    "The two-stage SE (--se_genome_length_cm) refits with its own number of copies. [default %(default)s]"
+  )
 )
 
 parser$add_argument("--mean_active_sources",
@@ -1089,6 +1115,8 @@ cv_bayes_fit <- function(y, S) {
     burnin = args$burnin,
     thin = args$thin,
     proposal_scale = args$proposal_scale,
+    alpha_prior = args$alpha_prior,
+    n_copies = args$n_copies,
     n_chains = args$mcmc_chains,
     adapt_burnin_frac = args$adapt_burnin_frac,
     adapt_interval = args$adapt_interval,
@@ -1229,6 +1257,8 @@ if (args$method == "bayesian") {
       burnin = args$burnin,
       thin = args$thin,
       proposal_scale = args$proposal_scale,
+      alpha_prior = args$alpha_prior,
+      n_copies = args$n_copies,
       n_chains = args$mcmc_chains,
       adapt_burnin_frac = args$adapt_burnin_frac,
       adapt_interval = args$adapt_interval,

@@ -211,6 +211,8 @@ Compare models on the same folds, as a paired per-target difference in `ll_test`
 | `mixture.burnin` | `20000` | int | Burn-in iterations. |
 | `mixture.thin` | `5` | int | Thinning interval. |
 | `mixture.proposal_scale` | `200` | number | Dirichlet proposal concentration. |
+| `mixture.n_copies` | `20000` | number | Number of observations the likelihood is multiplied by (`log-likelihood = n_copies * sum(y * log q)`). Fewer copies give a wider posterior and more pull towards the prior; more make the data dominate. Also used by the active-source search. The two-stage SE has its own value (`mixture.genome_length_cm`). |
+| `mixture.alpha_prior` | `0.05` | number | Concentration of the symmetric Dirichlet prior on the source weights. Below 1 favours sparse mixtures; `1` is flat; `0.5` was the default before and spreads small weights over many sources (with 30 sources about 19 above 1%, against about 6 at `0.05`). Posterior SDs and convergence (`rhat`) are somewhat worse at the sparse setting; see DIAGNOSTICS.md. |
 | `mixture.mcmc_chains` | `1` | int | Number of chains. |
 | `mixture.adapt_burnin_frac` | `0.0` | fraction | Fraction of burn-in used for proposal adaptation. |
 | `mixture.adapt_interval` | `200` | int | Adaptation update interval. |
