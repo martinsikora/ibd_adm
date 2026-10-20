@@ -37,6 +37,8 @@ parser$add_argument("--out", dest = "out_file",
   help = "Output distance-matrix .rds (m_d)")
 parser$add_argument("--dist_method", dest = "dist_method", type = "character",
   default = "cosine", help = "Distance method for parDist [default %(default)s]")
+parser$add_argument("--fast_cosine", dest = "fast_cosine", action = "store_true",
+  default = FALSE, help = "Use a BLAS tcrossprod fast path when dist_method is cosine")
 parser$add_argument("--normalize_ibd_vectors", dest = "normalize_ibd_vectors",
   action = "store_true", default = FALSE,
   help = "L2-normalize per-sample IBD vectors before distance calculation")
@@ -62,8 +64,24 @@ m_use <- apply_feature_transforms(
 )
 
 cat("__ computing distance matrix __\n")
-m_d <- parDist(m_use, method = args$dist_method, threads = args$threads) |>
-  as.matrix()
+m_d <- if (isTRUE(args$fast_cosine) && identical(args$dist_method, "cosine")) {
+  nrm  <- sqrt(rowSums(m_use * m_use))
+  zero <- nrm == 0
+  nrm[zero] <- 1
+  mn   <- m_use / nrm
+  d    <- 1 - tcrossprod(mn)
+  d[d < 0] <- 0
+  diag(d) <- 0
+  if (any(zero)) {
+    d[zero, ] <- 1; d[, zero] <- 1
+    diag(d) <- 0
+  }
+  dimnames(d) <- list(rownames(m_use), rownames(m_use))
+  d
+} else {
+  parDist(m_use, method = args$dist_method, threads = args$threads) |>
+    as.matrix()
+}
 rm(m_use)
 gc()
 

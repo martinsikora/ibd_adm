@@ -59,6 +59,7 @@ if ENABLE_DEFAULT_PIPELINE:
             rds=CLUSTER_MD_RDS,
         params:
             dist_method=CLUSTER_DIST_METHOD,
+            fast_cosine_flag=("--fast_cosine" if CLUSTER_FAST_COSINE else ""),
             normalize_flag=(
                 "--normalize_ibd_vectors" if CLUSTER_NORMALIZE_IBD_VECTORS else ""
             ),
@@ -74,7 +75,7 @@ if ENABLE_DEFAULT_PIPELINE:
         shell:
             """
             Rscript workflow/scripts/r/cluster_distance.R \
-            --in {input.rds} --out {output.rds} --dist_method {params.dist_method} \
+            --in {input.rds} --out {output.rds} --dist_method {params.dist_method} {params.fast_cosine_flag} \
             {params.normalize_flag} {params.standardize_flag} {params.scale_flag} --threads {threads}
             """
 

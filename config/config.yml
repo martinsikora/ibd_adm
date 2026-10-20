@@ -48,6 +48,7 @@ clustering:
   enabled: true
   clust_method: ward.D2   # hclust agglomeration method
   dist_method: cosine     # distance metric on the IBD feature vectors
+  fast_cosine: false        # opt-in: BLAS tcrossprod fast path when dist_method is cosine (identical result, far faster at scale)
   # IBD-vector transforms applied before the distance calculation:
   #   normalize_ibd_vectors: L2-normalize each sample's row vector
   #   standardize_features:  z-score each feature (centre AND scale)

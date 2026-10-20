@@ -36,6 +36,7 @@ MASK_SD = MASK_PARAMS.get("ibd_sd", 5)
 CLUSTER_ENABLED = bool(config.get("clustering", {}).get("enabled", True))
 CLUSTER_THREADS = int(config.get("clustering", {}).get("threads", 24))
 CLUSTER_DIST_METHOD = str(config.get("clustering", {}).get("dist_method", "cosine"))
+CLUSTER_FAST_COSINE = bool(config.get("clustering", {}).get("fast_cosine", False))
 CLUSTER_CLUST_METHOD = str(config.get("clustering", {}).get("clust_method", "ward.D2"))
 CLUSTER_NORMALIZE_IBD_VECTORS = bool(
     config.get("clustering", {}).get("normalize_ibd_vectors", False)
