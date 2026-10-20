@@ -1247,7 +1247,19 @@ ibd_pop_source_fit <- if (raw_scale) {
 stopifnot(identical(colnames(ibd_pop_source_fit), colnames(ibd_pop_source)))
 if (args$method == "bayesian") {
   cat("__ estimating Bayesian coefficients __\n")
-  p_full <- future_map_dfr(target_samples, function(x) {
+  ## A target with no aggregated IBD sharing has no column in ibd_pop_target
+  ## (pivoted from the sparse ibd_pop table), yet target_samples lists every
+  ## target -- so ibd_pop_target[, x] errors "subscript out of bounds" for such
+  ## a target (e.g. a low-coverage sample with no segments on the analysed
+  ## chromosomes). Fit only targets that have a palette column; the rest have
+  ## nothing to fit. (The NNLS/genome branch builds its matrix densely and is
+  ## unaffected.)
+  bayes_targets <- intersect(target_samples, colnames(ibd_pop_target))
+  if (length(bayes_targets) < length(target_samples)) {
+    message(sprintf("mixmodel: skipping %d target(s) with no IBD sharing (no palette column)",
+                    length(target_samples) - length(bayes_targets)))
+  }
+  p_full <- future_map_dfr(bayes_targets, function(x) {
     fit <- infer_sourcefind(
       y = ibd_pop_target[, x],
       source_mat = ibd_pop_source_fit,
